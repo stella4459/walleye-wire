@@ -3,20 +3,27 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: The Walleye Wire API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: stories
+    description: News stories
+  - name: events
+    description: Community events
+  - name: weather
+    description: Weather data
+  - name: admin
+    description: Admin operations
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +31,227 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /stories:
+    get:
+      operationId: getStories
+      tags: [stories]
+      summary: Get all stories
+      parameters:
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: source_tag
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 100
+      responses:
+        "200":
+          description: List of stories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Story"
+
+  /stories/{id}:
+    delete:
+      operationId: deleteStory
+      tags: [stories]
+      summary: Delete a story (admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
+  /stories/submit:
+    post:
+      operationId: submitStory
+      tags: [stories]
+      summary: Submit raw notes for AI formatting (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitStoryBody"
+      responses:
+        "200":
+          description: Story created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateResponse"
+
+  /stories/fetch:
+    post:
+      operationId: fetchStories
+      tags: [stories]
+      summary: Trigger AI news fetch (admin)
+      responses:
+        "200":
+          description: Number of stories added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FetchResult"
+
+  /gov/fetch:
+    post:
+      operationId: fetchGovDocs
+      tags: [admin]
+      summary: Trigger City Council doc fetch (admin)
+      responses:
+        "200":
+          description: Fetch result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GovFetchResult"
+
+  /events:
+    get:
+      operationId: getEvents
+      tags: [events]
+      summary: Get upcoming approved events
+      parameters:
+        - name: all
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ["0", "1"]
+      responses:
+        "200":
+          description: List of events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Event"
+
+  /events/submit:
+    post:
+      operationId: submitEvent
+      tags: [events]
+      summary: Submit community event for approval
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitEventBody"
+      responses:
+        "200":
+          description: Event submitted pending review
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventSubmitResponse"
+
+  /events/add:
+    post:
+      operationId: addEvent
+      tags: [events]
+      summary: Add event directly (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddEventBody"
+      responses:
+        "200":
+          description: Event added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateResponse"
+
+  /events/approve/{id}:
+    post:
+      operationId: approveEvent
+      tags: [events]
+      summary: Approve a pending event (admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
+  /events/{id}:
+    delete:
+      operationId: deleteEvent
+      tags: [events]
+      summary: Delete an event (admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
+  /weather:
+    get:
+      operationId: getWeather
+      tags: [weather]
+      summary: Get current weather and 5-day forecast for Port Clinton OH
+      responses:
+        "200":
+          description: Weather data from Open-Meteo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeatherData"
+
+  /stats:
+    get:
+      operationId: getStats
+      tags: [stories]
+      summary: Summary stats (story counts by category, recent activity)
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Stats"
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +259,212 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    OkResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+      required: [ok]
+
+    CreateResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+      required: [id]
+
+    FetchResult:
+      type: object
+      properties:
+        added:
+          type: integer
+      required: [added]
+
+    GovFetchResult:
+      type: object
+      properties:
+        portclinton:
+          type: object
+          properties:
+            added:
+              type: integer
+          required: [added]
+      required: [portclinton]
+
+    EventSubmitResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        pending:
+          type: boolean
+      required: [id, pending]
+
+    CouncilVote:
+      type: object
+      properties:
+        motion:
+          type: string
+        vote:
+          type: string
+      required: [motion, vote]
+
+    Story:
+      type: object
+      properties:
+        id:
+          type: integer
+        headline:
+          type: string
+        category:
+          type: string
+        source_tag:
+          type: string
+        summary:
+          type: string
+        body:
+          type: string
+        story_date:
+          type: string
+        source_name:
+          type: string
+        source_url:
+          type: string
+        is_council:
+          type: boolean
+        council_votes:
+          type: array
+          items:
+            $ref: "#/components/schemas/CouncilVote"
+        created_at:
+          type: integer
+      required: [id, headline, category]
+
+    Event:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        event_date:
+          type: string
+        event_time:
+          type: string
+        location:
+          type: string
+        description:
+          type: string
+        submitted_by:
+          type: string
+        source:
+          type: string
+        approved:
+          type: boolean
+        created_at:
+          type: integer
+      required: [id, title, event_date]
+
+    SubmitStoryBody:
+      type: object
+      properties:
+        text:
+          type: string
+        category:
+          type: string
+      required: [text]
+
+    SubmitEventBody:
+      type: object
+      properties:
+        title:
+          type: string
+        event_date:
+          type: string
+        event_time:
+          type: string
+        location:
+          type: string
+        description:
+          type: string
+        submitted_by:
+          type: string
+      required: [title, event_date]
+
+    AddEventBody:
+      type: object
+      properties:
+        title:
+          type: string
+        event_date:
+          type: string
+        event_time:
+          type: string
+        location:
+          type: string
+        description:
+          type: string
+        source:
+          type: string
+      required: [title, event_date]
+
+    WeatherData:
+      type: object
+      properties:
+        current:
+          type: object
+          properties:
+            temperature_2m:
+              type: number
+            weathercode:
+              type: integer
+            windspeed_10m:
+              type: number
+            relativehumidity_2m:
+              type: number
+        daily:
+          type: object
+          properties:
+            time:
+              type: array
+              items:
+                type: string
+            temperature_2m_max:
+              type: array
+              items:
+                type: number
+            temperature_2m_min:
+              type: array
+              items:
+                type: number
+            weathercode:
+              type: array
+              items:
+                type: integer
+            precipitation_sum:
+              type: array
+              items:
+                type: number
+
+    Stats:
+      type: object
+      properties:
+        total:
+          type: integer
+        by_category:
+          type: array
+          items:
+            type: object
+            properties:
+              category:
+                type: string
+              count:
+                type: integer
+            required: [category, count]
+        recent_count:
+          type: integer
+        pending_events:
+          type: integer
+      required: [total, by_category, recent_count, pending_events]
