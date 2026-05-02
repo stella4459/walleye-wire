@@ -29,6 +29,7 @@ export default function Admin() {
   const [isRunningAI, setIsRunningAI] = useState(false);
   const [isCheckingGov, setIsCheckingGov] = useState(false);
   const [isLoadingGov, setIsLoadingGov] = useState(false);
+  const [isResettingGov, setIsResettingGov] = useState(false);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
   const pdfInputRef = useRef<HTMLInputElement>(null);
@@ -139,6 +140,21 @@ export default function Admin() {
       toast({ title: "Error", description: "Failed to run initial load", variant: "destructive" });
     } finally {
       setIsLoadingGov(false);
+    }
+  };
+
+  const onResetGov = async () => {
+    if (!window.confirm("This will DELETE all existing government documents and re-import from the Google Sheet. Continue?")) return;
+    setIsResettingGov(true);
+    try {
+      const result = await adminFetch("/api/gov/reset");
+      const { deleted = 0, added = 0 } = result ?? {};
+      toast({ title: "Reset Complete", description: `Deleted ${deleted} old doc(s), imported ${added} from Google Sheet.` });
+      queryClient.invalidateQueries({ queryKey: getGetStoriesQueryKey() });
+    } catch (e) {
+      toast({ title: "Error", description: "Reset failed", variant: "destructive" });
+    } finally {
+      setIsResettingGov(false);
     }
   };
 
@@ -357,8 +373,17 @@ export default function Admin() {
                   <FileText size={14} className={`mr-2 ${isLoadingGov ? "animate-spin" : ""}`} />
                   {isLoadingGov ? "Loading All…" : "Initial Load (Full Backfill)"}
                 </Button>
+                <Button
+                  onClick={onResetGov}
+                  disabled={isCheckingGov || isLoadingGov || isResettingGov}
+                  variant="outline"
+                  className="w-full justify-start rounded-none font-mono text-xs uppercase tracking-widest border-red-600/50 text-red-700 hover:bg-red-50"
+                >
+                  <Trash2 size={14} className={`mr-2 ${isResettingGov ? "animate-spin" : ""}`} />
+                  {isResettingGov ? "Resetting…" : "Reset & Reload from Sheet"}
+                </Button>
                 <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">
-                  "Check for New" scans the sheet and stops at the first known doc. "Initial Load" imports every row — use once or to backfill.
+                  "Check for New" scans the sheet and stops at the first known doc. "Initial Load" imports every row — skip already-imported ones. "Reset & Reload" deletes all gov docs and re-imports fresh from the sheet.
                 </p>
               </div>
             </div>

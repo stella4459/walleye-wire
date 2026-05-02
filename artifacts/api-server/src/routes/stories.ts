@@ -152,6 +152,19 @@ router.post("/gov/backfill", requireAdmin, async (req, res) => {
   }
 });
 
+// Reset — deletes all Government stories then re-imports from the sheet
+router.post("/gov/reset", requireAdmin, async (req, res) => {
+  try {
+    const deleted = await db.delete(storiesTable).where(eq(storiesTable.category, "Government")).returning({ id: storiesTable.id });
+    req.log.info({ deleted: deleted.length }, "[Gov] Deleted all government stories for reset");
+    const result = await runGovInitialLoad();
+    res.json({ deleted: deleted.length, ...result });
+  } catch (e) {
+    req.log.error({ err: e }, "Error resetting gov docs");
+    res.status(500).json({ error: "Failed to reset government documents" });
+  }
+});
+
 router.post(
   "/stories/upload-minutes",
   requireAdmin,
