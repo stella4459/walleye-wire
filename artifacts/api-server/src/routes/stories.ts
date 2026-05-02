@@ -1,5 +1,9 @@
 import { Router } from "express";
 import multer from "multer";
+// pdf-parse v1 — CommonJS, required via createRequire
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const pdfParse = require("pdf-parse") as (buf: Buffer) => Promise<{ text: string; numpages: number }>;
 import { db } from "@workspace/db";
 import { storiesTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
@@ -154,7 +158,6 @@ router.post(
         return;
       }
 
-      const base64 = file.buffer.toString("base64");
       const filename = file.originalname || "minutes.pdf";
 
       const system = `You are an editor for The Walleye Wire, a local news site for Port Clinton, Ohio.
@@ -165,20 +168,45 @@ Return ONLY a valid JSON object with:
 - category: "Local Government"
 - source_tag: one of "Ordinance", "Resolution", "Council Minutes", "Council Agenda" (match the document type)
 - summary: 1-2 sentences summarizing what happened and why it matters to residents
-- body: 3-5 sentences with key decisions, votes, or actions from the document
+- body: 3-5 sentences with key decisions, votes, or actions from the document. Include vote tallies if present.
 - story_date: meeting date in "Month D, YYYY" format
 - source_name: "Port Clinton City Council"
 - is_council: true
-- council_votes: array of {motion, vote} objects if votes are mentioned, otherwise []`;
+- council_votes: array of {motion, vote} objects for any votes mentioned, otherwise []`;
 
-      const userPrompt = `Document filename: ${filename}
-Please read the attached PDF and write a news story based on its actual content.`;
+      let raw: string;
 
-      const raw = await callClaudeWithDocs(
-        [{ base64, sourceUrl: filename }],
-        userPrompt,
-        system
-      );
+      // Try extracting text with pdf-parse first (works for text-based PDFs)
+      let extractedText: string | null = null;
+      try {
+        const parsed = await pdfParse(file.buffer);
+        const fullText = parsed.text ?? "";
+        if (fullText.trim().length > 100) {
+          extractedText = fullText.trim().slice(0, 12000); // cap to stay within token limits
+          req.log.info({ filename, chars: extractedText.length }, "PDF text extracted with pdf-parse");
+        }
+      } catch (parseErr) {
+        req.log.warn({ err: parseErr, filename }, "pdf-parse failed, will fall back to base64");
+      }
+
+      if (extractedText) {
+        // Text-based PDF: pass extracted text directly to Claude as a message
+        const userPrompt = `Document filename: ${filename}
+
+Extracted text from the PDF:
+---
+${extractedText}
+---
+
+Write a news story based on this document's actual content.`;
+        raw = await callClaude([{ role: "user", content: userPrompt }], system);
+      } else {
+        // Scanned/image PDF: fall back to sending as base64 document
+        req.log.info({ filename }, "Falling back to base64 document API for scanned PDF");
+        const base64 = file.buffer.toString("base64");
+        const userPrompt = `Document filename: ${filename}\nPlease read the attached PDF and write a news story based on its actual content.`;
+        raw = await callClaudeWithDocs([{ base64, sourceUrl: filename }], userPrompt, system);
+      }
 
       const s = parseObj(raw);
       if (!s?.headline) {
