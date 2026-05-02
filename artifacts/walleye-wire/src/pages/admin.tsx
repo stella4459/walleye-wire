@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Lock, Trash2, CheckCircle, RefreshCw, FileText, Send } from "lucide-react";
+import { Lock, Trash2, CheckCircle, RefreshCw, FileText, Send, Sparkles } from "lucide-react";
 
 export default function Admin() {
   const [password, setPassword] = useState("");
@@ -15,6 +15,7 @@ export default function Admin() {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [manualText, setManualText] = useState("");
   const [manualCategory, setManualCategory] = useState("Community");
+  const [isRunningAI, setIsRunningAI] = useState(false);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -72,6 +73,20 @@ export default function Admin() {
     });
     if (!res.ok) throw new Error("Request failed");
     return res.json();
+  };
+
+  const onRunAIRefresh = async () => {
+    setIsRunningAI(true);
+    try {
+      await adminFetch("/api/stories/fetch");
+      await adminFetch("/api/gov/fetch");
+      queryClient.invalidateQueries({ queryKey: getGetStoriesQueryKey() });
+      toast({ title: "AI Refresh Complete", description: "Claude has fetched the latest news and government documents." });
+    } catch (e) {
+      toast({ title: "AI Refresh Failed", description: "One or more fetch steps encountered an error.", variant: "destructive" });
+    } finally {
+      setIsRunningAI(false);
+    }
   };
 
   const onFetchNews = async () => {
@@ -245,12 +260,25 @@ export default function Admin() {
           <section className="bg-card border-2 border-foreground p-6">
             <h2 className="font-headline text-2xl mb-4 border-b border-border pb-2 uppercase">Triggers</h2>
             <div className="space-y-4">
-              <Button onClick={onFetchNews} className="w-full justify-start rounded-none font-bold tracking-widest uppercase">
-                <RefreshCw size={16} className="mr-2" /> Fetch News RSS
+              <Button
+                onClick={onRunAIRefresh}
+                disabled={isRunningAI}
+                className="w-full justify-center rounded-none font-bold tracking-widest uppercase bg-primary hover:bg-primary/85 text-white py-6 text-sm"
+              >
+                <Sparkles size={16} className={`mr-2 ${isRunningAI ? "animate-spin" : ""}`} />
+                {isRunningAI ? "Claude Is Running…" : "Run AI Refresh"}
               </Button>
-              <Button onClick={onFetchGovDocs} className="w-full justify-start rounded-none font-bold tracking-widest uppercase">
-                <FileText size={16} className="mr-2" /> Fetch Gov Docs
-              </Button>
+              <p className="font-mono text-[11px] text-muted-foreground leading-relaxed">
+                Fetches latest news and government documents through Claude, then updates all stories.
+              </p>
+              <div className="pt-2 border-t border-border space-y-3">
+                <Button onClick={onFetchNews} variant="outline" className="w-full justify-start rounded-none font-mono text-xs uppercase tracking-widest">
+                  <RefreshCw size={14} className="mr-2" /> News Only
+                </Button>
+                <Button onClick={onFetchGovDocs} variant="outline" className="w-full justify-start rounded-none font-mono text-xs uppercase tracking-widest">
+                  <FileText size={14} className="mr-2" /> Gov Docs Only
+                </Button>
+              </div>
             </div>
           </section>
 
