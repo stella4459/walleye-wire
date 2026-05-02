@@ -70,9 +70,7 @@ function WeatherWidget() {
       <div className="flex items-start justify-between">
         <div>
           <div className="text-5xl font-bold leading-none">{temp}&deg;</div>
-          {/* text-white/80 = ~12:1 on dark bg ✓ */}
           <div className="mt-2 text-sm text-white/80 uppercase tracking-wider">{label}</div>
-          {/* text-white/70 = ~9:1 on dark bg ✓ */}
           <div className="mt-1 text-xs text-white/70">
             H: {high}&deg; &nbsp; L: {low}&deg;
           </div>
@@ -80,11 +78,9 @@ function WeatherWidget() {
             Wind: {weather.current.windspeed_10m} mph &nbsp;&bull;&nbsp; Humidity: {weather.current.relativehumidity_2m}%
           </div>
         </div>
-        {/* Decorative icon — aria-hidden ✓ */}
         <Icon size={56} className="text-white/20 mt-1 shrink-0" aria-hidden="true" />
       </div>
       <div className="mt-4 pt-3 border-t border-white/20">
-        {/* text-white/70 = ~9:1 on dark bg ✓ */}
         <Link href="/weather" className="text-[11px] tracking-widest uppercase text-white/70 hover:text-white transition-colors">
           Full Forecast &rarr;
         </Link>
@@ -93,15 +89,65 @@ function WeatherWidget() {
   );
 }
 
+function StorySectionPreview({
+  category,
+  label,
+  href,
+}: {
+  category: string;
+  label: string;
+  href: string;
+}) {
+  const params = { category, limit: 1 };
+  const { data: stories, isLoading } = useGetStories(params, {
+    query: { queryKey: getGetStoriesQueryKey(params) },
+  });
+
+  const story = stories?.[0];
+
+  return (
+    <section aria-labelledby={`section-${href.replace("/", "")}`}>
+      <SectionHeader>
+        <span id={`section-${href.replace("/", "")}`}>{label}</span>
+      </SectionHeader>
+
+      {isLoading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-5 w-3/4" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-5/6" />
+        </div>
+      ) : story ? (
+        <StoryCard story={story} index={0} />
+      ) : (
+        <div className="border border-border py-8 px-6 text-center bg-card">
+          <p className="font-mono text-xs text-muted-foreground tracking-wide uppercase">
+            No stories yet &mdash; check back soon.
+          </p>
+        </div>
+      )}
+
+      <div className="mt-4">
+        <Link
+          href={href}
+          className="inline-block font-mono text-xs font-bold tracking-widest uppercase text-white bg-primary hover:bg-primary/85 px-5 py-2.5 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        >
+          View All &rarr;
+        </Link>
+      </div>
+    </section>
+  );
+}
+
 export default function Home() {
   const { data: stories, isLoading } = useGetStories({ limit: 12 }, { query: { queryKey: getGetStoriesQueryKey({ limit: 12 }) } });
 
   return (
     <div className="w-full">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-12">
 
+        {/* Latest Stories + Weather sidebar */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Stories — 2/3 width */}
           <div className="lg:col-span-2">
             <SectionHeader>Latest Stories</SectionHeader>
 
@@ -130,12 +176,26 @@ export default function Home() {
             )}
           </div>
 
-          {/* Sidebar — 1/3 width */}
           <div className="lg:col-span-1">
             <SectionHeader>Weather &middot; Port Clinton</SectionHeader>
             <WeatherWidget />
           </div>
         </div>
+
+        {/* Community News + Local Government section previews */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-10 border-t border-border pt-10">
+          <StorySectionPreview
+            category="Community,General,Weather"
+            label="Community News"
+            href="/community"
+          />
+          <StorySectionPreview
+            category="Government"
+            label="Local Government"
+            href="/government"
+          />
+        </div>
+
       </div>
     </div>
   );

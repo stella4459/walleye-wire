@@ -9,7 +9,7 @@ export default function Community() {
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <header className="mb-12 border-b-2 border-foreground pb-4">
         <h1 className="font-headline text-5xl md:text-6xl font-bold text-foreground tracking-tight uppercase">
-          Community
+          Community News
         </h1>
         <p className="font-serif text-lg text-muted-foreground mt-4">
           Local happenings, features, and weather out on the lake.

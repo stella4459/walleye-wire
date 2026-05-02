@@ -1,22 +1,19 @@
 import { Link, useLocation } from "wouter";
 import { Menu, X } from "lucide-react";
 import { useState } from "react";
-import { Ticker } from "@/components/shared/Ticker";
 
 export function Navbar() {
   const [location] = useLocation();
   const [isOpen, setIsOpen] = useState(false);
 
   const links = [
-    { href: "/", label: "Home" },
-    { href: "/community", label: "Community" },
+    { href: "/community", label: "Community News" },
     { href: "/government", label: "Local Government" },
     { href: "/calendar", label: "Calendar" },
     { href: "/weather", label: "Weather" },
   ];
 
   const isActive = (href: string) => location === href;
-  const currentLabel = links.find((l) => isActive(l.href))?.label ?? "Menu";
 
   return (
     <header role="banner">
@@ -56,11 +53,8 @@ export function Navbar() {
           ))}
         </ul>
 
-        {/* Mobile nav toggle */}
-        <div className="md:hidden flex items-center justify-between px-4 py-3">
-          <span className="font-mono text-xs tracking-widest uppercase text-white" aria-hidden="true">
-            {currentLabel}
-          </span>
+        {/* Mobile nav toggle — hamburger on the LEFT */}
+        <div className="md:hidden flex items-center gap-3 px-4 py-3">
           <button
             onClick={() => setIsOpen(!isOpen)}
             className="text-white p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
@@ -70,6 +64,9 @@ export function Navbar() {
           >
             {isOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
+          <span className="font-mono text-xs tracking-widest uppercase text-white/80" aria-hidden="true">
+            Menu
+          </span>
         </div>
 
         {isOpen && (
@@ -93,9 +90,6 @@ export function Navbar() {
           </ul>
         )}
       </nav>
-
-      {/* LATEST ticker bar */}
-      <Ticker />
     </header>
   );
 }
