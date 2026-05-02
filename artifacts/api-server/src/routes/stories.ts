@@ -1,12 +1,15 @@
 import { Router } from "express";
+import multer from "multer";
 import { db } from "@workspace/db";
 import { storiesTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { GetStoriesQueryParams, SubmitStoryBody } from "@workspace/api-zod";
 import { requireAdmin } from "../middlewares/admin";
 import { fetchGeneralNews, fetchAllGovDocs } from "../lib/news";
-import { callClaude, parseObj } from "../lib/claude";
+import { callClaude, callClaudeWithDocs, parseObj } from "../lib/claude";
 import { logger } from "../lib/logger";
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
 const router = Router();
 
@@ -132,5 +135,88 @@ router.post("/gov/fetch", requireAdmin, async (req, res) => {
     res.status(500).json({ error: "Failed to fetch gov docs" });
   }
 });
+
+router.post(
+  "/stories/upload-minutes",
+  requireAdmin,
+  upload.single("pdf"),
+  async (req, res) => {
+    try {
+      const file = (req as any).file as { buffer: Buffer; originalname: string } | undefined;
+      if (!file || !file.buffer || file.buffer.length === 0) {
+        res.status(400).json({ error: "No PDF file provided." });
+        return;
+      }
+
+      const magic = file.buffer.slice(0, 5).toString("ascii");
+      if (magic !== "%PDF-") {
+        res.status(400).json({ error: "File does not appear to be a valid PDF." });
+        return;
+      }
+
+      const base64 = file.buffer.toString("base64");
+      const filename = file.originalname || "minutes.pdf";
+
+      const system = `You are an editor for The Walleye Wire, a local news site for Port Clinton, Ohio.
+You have been given the actual text of an official Port Clinton City Council document (minutes, ordinance, resolution, or agenda).
+Write a plain-English news story based ONLY on the actual content of the document.
+Return ONLY a valid JSON object with:
+- headline: clear, plain-English headline
+- category: "Local Government"
+- source_tag: one of "Ordinance", "Resolution", "Council Minutes", "Council Agenda" (match the document type)
+- summary: 1-2 sentences summarizing what happened and why it matters to residents
+- body: 3-5 sentences with key decisions, votes, or actions from the document
+- story_date: meeting date in "Month D, YYYY" format
+- source_name: "Port Clinton City Council"
+- is_council: true
+- council_votes: array of {motion, vote} objects if votes are mentioned, otherwise []`;
+
+      const userPrompt = `Document filename: ${filename}
+Please read the attached PDF and write a news story based on its actual content.`;
+
+      const raw = await callClaudeWithDocs(
+        [{ base64, sourceUrl: filename }],
+        userPrompt,
+        system
+      );
+
+      const s = parseObj(raw);
+      if (!s?.headline) {
+        res.status(422).json({ error: "Claude could not parse the document." });
+        return;
+      }
+
+      let createdAt = Math.floor(Date.now() / 1000);
+      try {
+        const d = new Date(String(s.story_date));
+        if (!isNaN(d.getTime())) createdAt = Math.floor(d.getTime() / 1000);
+      } catch {}
+
+      const result = await db
+        .insert(storiesTable)
+        .values({
+          headline: String(s.headline),
+          category: "Government",
+          source_tag: String(s.source_tag || "Council Minutes"),
+          summary: String(s.summary || ""),
+          body: String(s.body || ""),
+          story_date: String(s.story_date || ""),
+          source_name: "Port Clinton City Council",
+          source_url: filename,
+          is_council: true,
+          council_votes:
+            (s.council_votes as Array<{ motion: string; vote: string }>) || [],
+          created_at: createdAt,
+        })
+        .returning({ id: storiesTable.id });
+
+      req.log.info({ filename, id: result[0]?.id }, "Council doc uploaded and summarized");
+      res.json({ id: result[0]?.id, headline: s.headline });
+    } catch (e) {
+      req.log.error({ err: e }, "Error uploading minutes PDF");
+      res.status(500).json({ error: "Failed to process PDF." });
+    }
+  }
+);
 
 export default router;

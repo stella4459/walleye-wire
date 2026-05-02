@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -7,7 +7,18 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Lock, Trash2, CheckCircle, RefreshCw, FileText, Send, Sparkles } from "lucide-react";
+import { Lock, Trash2, CheckCircle, RefreshCw, FileText, Send, Sparkles, Upload } from "lucide-react";
+
+function safeDateFormat(dateStr: string | null | undefined, fmt: string): string {
+  if (!dateStr) return "—";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return format(d, fmt);
+  } catch {
+    return dateStr;
+  }
+}
 
 export default function Admin() {
   const [password, setPassword] = useState("");
@@ -16,6 +27,9 @@ export default function Admin() {
   const [manualText, setManualText] = useState("");
   const [manualCategory, setManualCategory] = useState("Community");
   const [isRunningAI, setIsRunningAI] = useState(false);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [isUploadingPdf, setIsUploadingPdf] = useState(false);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -150,6 +164,34 @@ export default function Admin() {
     }
   };
 
+  const onUploadPdf = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pdfFile) return;
+    setIsUploadingPdf(true);
+    try {
+      const formData = new FormData();
+      formData.append("pdf", pdfFile);
+      const res = await fetch("/api/stories/upload-minutes", {
+        method: "POST",
+        headers: { "X-Admin-Password": password },
+        body: formData,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(err.error || "Upload failed");
+      }
+      const data = await res.json();
+      toast({ title: "PDF Processed", description: `Story created: ${data.headline}` });
+      setPdfFile(null);
+      if (pdfInputRef.current) pdfInputRef.current.value = "";
+      queryClient.invalidateQueries({ queryKey: getGetStoriesQueryKey() });
+    } catch (err: any) {
+      toast({ title: "Upload Failed", description: err.message || "Could not process PDF", variant: "destructive" });
+    } finally {
+      setIsUploadingPdf(false);
+    }
+  };
+
   if (!isAuthenticated) {
     return (
       <div className="container mx-auto px-4 py-20 max-w-md">
@@ -199,7 +241,7 @@ export default function Admin() {
                   <div className="min-w-0 flex-1 mr-4">
                     <div className="flex items-center gap-2 mb-1">
                       <Badge variant="outline" className="text-[10px] rounded-none font-mono">{story.category}</Badge>
-                      <span className="font-mono text-xs text-muted-foreground">{format(new Date(story.story_date || new Date()), "MM/dd/yyyy")}</span>
+                      <span className="font-mono text-xs text-muted-foreground">{safeDateFormat(story.story_date, "MM/dd/yyyy")}</span>
                     </div>
                     <p className="font-serif text-sm font-bold truncate">{story.headline}</p>
                   </div>
@@ -280,6 +322,44 @@ export default function Admin() {
                 </Button>
               </div>
             </div>
+          </section>
+
+          <section className="bg-card border border-border p-6">
+            <h2 className="font-headline text-2xl mb-4 border-b border-border pb-2 uppercase">Upload PDF</h2>
+            <p className="font-mono text-[11px] text-muted-foreground mb-4 leading-relaxed">
+              Download a council minutes PDF from portclinton.com, then upload it here. Claude will read the actual content and write a summary.
+            </p>
+            <form onSubmit={onUploadPdf} className="space-y-4">
+              <div
+                className="border-2 border-dashed border-border p-6 text-center cursor-pointer hover:border-primary transition-colors"
+                onClick={() => pdfInputRef.current?.click()}
+              >
+                <Upload size={24} className="mx-auto mb-2 text-muted-foreground" />
+                {pdfFile ? (
+                  <p className="font-mono text-sm text-foreground font-bold truncate">{pdfFile.name}</p>
+                ) : (
+                  <p className="font-mono text-sm text-muted-foreground">Click to select a PDF file</p>
+                )}
+                <input
+                  ref={pdfInputRef}
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  className="hidden"
+                  onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)}
+                />
+              </div>
+              <Button
+                type="submit"
+                disabled={!pdfFile || isUploadingPdf}
+                className="w-full rounded-none font-bold tracking-widest uppercase"
+              >
+                {isUploadingPdf ? (
+                  <><Sparkles size={16} className="mr-2 animate-spin" /> Claude Is Reading…</>
+                ) : (
+                  <><Upload size={16} className="mr-2" /> Send to Claude</>
+                )}
+              </Button>
+            </form>
           </section>
 
           <section className="bg-card border border-border p-6">
