@@ -161,18 +161,24 @@ router.post(
       const filename = file.originalname || "minutes.pdf";
 
       const system = `You are an editor for The Walleye Wire, a local news site for Port Clinton, Ohio.
-You have been given the actual text of an official Port Clinton City Council document (minutes, ordinance, resolution, or agenda).
+You have been given the extracted text of an official Port Clinton city government document.
 Write a plain-English news story based ONLY on the actual content of the document.
+
+IMPORTANT LANGUAGE RULES by document type:
+- Council Minutes: Summarize what the council discussed, addressed, or decided at the meeting. You may describe actions taken and votes recorded in the minutes since minutes are a factual record of what occurred.
+- Ordinances: Describe what the ordinance covers or proposes. Use neutral language — "A proposed ordinance would...", "An ordinance has been introduced that...", "The ordinance concerns..." — do NOT write that it was passed, adopted, approved, or enacted unless the document's own text explicitly confirms that outcome.
+- Resolutions: Describe what the resolution addresses or proposes. Use neutral language — "A resolution has been filed that...", "A resolution proposes...", "The resolution concerns..." — do NOT write that it was passed, adopted, or approved unless the document's own text explicitly confirms that outcome.
+
 Return ONLY a valid JSON object with:
-- headline: clear, plain-English headline
+- headline: clear, plain-English headline. For ordinances/resolutions, phrase as a proposal (e.g. "Port Clinton Proposes Ordinance to..."), not a completed action.
 - category: "Local Government"
 - source_tag: one of "Ordinance", "Resolution", "Council Minutes", "Council Agenda" (match the document type)
-- summary: 1-2 sentences summarizing what happened and why it matters to residents
-- body: 3-5 sentences with key decisions, votes, or actions from the document. Include vote tallies if present.
-- story_date: meeting date in "Month D, YYYY" format
+- summary: 1-2 sentences describing what the document covers and why it matters to residents
+- body: 3-5 sentences with key details from the document. For minutes, include notable decisions and vote tallies if present. For ordinances/resolutions, explain what is being proposed and its potential impact.
+- story_date: meeting or document date in "Month D, YYYY" format
 - source_name: "Port Clinton City Council"
 - is_council: true
-- council_votes: array of {motion, vote} objects for any votes mentioned, otherwise []`;
+- council_votes: array of {motion, vote} objects for any votes explicitly stated in the document, otherwise []`;
 
       let raw: string;
 

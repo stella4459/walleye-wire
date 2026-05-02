@@ -284,6 +284,50 @@ async function parseDocumentCenter(): Promise<GovDoc[]> {
   return docs;
 }
 
+/**
+ * Returns true if a document appears to be within the last 6 months.
+ * Tries to parse an explicit date from the label/title first; falls back to year.
+ */
+function isWithinLastSixMonths(doc: GovDoc): boolean {
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - 6);
+
+  const text = `${doc.label} ${doc.title}`;
+
+  // Try full date patterns — matches "April 8, 2026" or "April 2026"
+  const fullDatePatterns = [
+    /([A-Za-z]+ \d{1,2},? \d{4})/,
+    /([A-Za-z]+ \d{4})/,
+  ];
+  for (const pat of fullDatePatterns) {
+    const m = text.match(pat);
+    if (m) {
+      const d = new Date(m[1]);
+      if (!isNaN(d.getTime())) return d >= cutoff;
+    }
+  }
+
+  // Try 4-digit year (e.g. "2026" or "2025")
+  const fullYearMatch = text.match(/\b(20\d{2})\b/);
+  if (fullYearMatch) {
+    const year = parseInt(fullYearMatch[1]);
+    const currentYear = new Date().getFullYear();
+    // Include current year always; previous year could overlap the 6-month window
+    return year >= currentYear - 1;
+  }
+
+  // Try 2-digit year suffix (e.g. "Ordinance 5-26" → 2026, "Resolution 14-25" → 2025)
+  const shortYearMatch = text.match(/-(\d{2})\b/);
+  if (shortYearMatch) {
+    const year = 2000 + parseInt(shortYearMatch[1]);
+    const currentYear = new Date().getFullYear();
+    return year >= currentYear - 1;
+  }
+
+  // No date info — include by default (rely on page-order slicing for recency)
+  return true;
+}
+
 async function processGovDocBatch(batch: GovDoc[]): Promise<number> {
   const system = `You are a local government reporter for The Walleye Wire, the community news site for Port Clinton, Ohio.
 You will be given a list of city government documents (ordinances, resolutions, or council meeting minutes) from the Port Clinton city website.
@@ -292,11 +336,16 @@ Each entry has a document number/label, a descriptive title, and the document ty
 For each document, produce a plain-English news story based solely on the title and document type.
 Do NOT invent specific vote counts, dollar amounts, or people's names unless they are clearly stated in the title.
 
+IMPORTANT LANGUAGE RULES by document type:
+- Council Minutes: Describe what the council discussed or addressed at the meeting. Use phrases like "The Port Clinton City Council met on [date] to address..." or "Topics at the [date] council meeting included..." You may reference agenda items as discussed without implying final outcomes unless the title states them clearly.
+- Ordinances: Describe what the ordinance concerns or proposes. Use neutral language such as "A proposed ordinance would..." or "Port Clinton has introduced an ordinance that..." — never write that an ordinance was passed, adopted, approved, or enacted unless the title explicitly says so.
+- Resolutions: Describe what the resolution covers or proposes. Use neutral language such as "A resolution has been filed that..." or "Port Clinton has put forward a resolution to..." — never write that a resolution was passed, adopted, or approved unless the title explicitly says so.
+
 Return ONLY a valid JSON array with one object per document, no markdown, no explanation.
 
 Each object must have:
 - doc_index: integer (1-based, matching the [N] prefix in the input)
-- headline: clear, plain-English headline (not legal jargon)
+- headline: clear, plain-English headline (not legal jargon). For ordinances/resolutions, phrase as a proposal, not a completed action.
 - category: "Local Government"
 - source_tag: one of "Ordinance", "Resolution", "Council Minutes"
 - summary: 1-2 sentence plain-English summary of what the document is about and why it matters to residents
@@ -380,20 +429,20 @@ export async function fetchPortClintonDocs(
     const existingUrls = new Set(existingRows.map((r) => r.source_url));
 
     const isNew = (d: GovDoc) => !existingUrls.has(d.fullUrl);
+    const isRecent = (d: GovDoc) => isWithinLastSixMonths(d);
 
     let toProcess: GovDoc[];
+    const bySection = ["Ordinances", "Resolutions", "CouncilMinutes"] as const;
     if (backfill) {
-      // Take up to 10 recent docs per section
-      const bySection = ["Ordinances", "Resolutions", "CouncilMinutes"] as const;
+      // Take up to 10 recent docs per section, within the last 6 months
       toProcess = bySection.flatMap((sec) =>
-        allDocs.filter((d) => d.section === sec && isNew(d)).slice(0, 10)
+        allDocs.filter((d) => d.section === sec && isNew(d) && isRecent(d)).slice(0, 10)
       );
-      logger.info(`[CityCouncil] Backfill: ${toProcess.length} new docs.`);
+      logger.info(`[CityCouncil] Backfill: ${toProcess.length} new docs within last 6 months.`);
     } else {
-      // Normal run: up to 5 most recent per section
-      const bySection = ["Ordinances", "Resolutions", "CouncilMinutes"] as const;
+      // Normal run: up to 5 most recent per section, within the last 6 months
       toProcess = bySection.flatMap((sec) =>
-        allDocs.filter((d) => d.section === sec && isNew(d)).slice(0, 5)
+        allDocs.filter((d) => d.section === sec && isNew(d) && isRecent(d)).slice(0, 5)
       );
     }
 
