@@ -4,7 +4,7 @@ import { StoryCard } from "@/components/shared/StoryCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 
-const SOURCES = ["All", "Ordinance", "Resolution", "Council Minutes"];
+const SOURCES = ["All", "Ordinance", "Resolution"];
 
 export default function Government() {
   const [filter, setFilter] = useState<string>("All");
@@ -25,7 +25,7 @@ export default function Government() {
           Local Government
         </h1>
         <p className="font-serif text-lg text-muted-foreground mt-4">
-          Ordinances, resolutions, and council meeting minutes from Port Clinton City Hall.
+          Ordinances and resolutions from Port Clinton City Hall, summarized in plain English. Click "View source" on any item to read the original document.
         </p>
       </header>
 
@@ -62,7 +62,7 @@ export default function Government() {
       ) : (
         <div className="text-center py-20 bg-muted/30 border border-border rounded-sm">
           <p className="font-serif text-lg text-muted-foreground">
-            No government documents found. Run an AI refresh in the admin panel to populate.
+            No documents found. Use "Initial Load" in the admin panel to import all ordinances and resolutions from the Google Sheet.
           </p>
         </div>
       )}

@@ -27,6 +27,8 @@ export default function Admin() {
   const [manualText, setManualText] = useState("");
   const [manualCategory, setManualCategory] = useState("Community");
   const [isRunningAI, setIsRunningAI] = useState(false);
+  const [isCheckingGov, setIsCheckingGov] = useState(false);
+  const [isLoadingGov, setIsLoadingGov] = useState(false);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
   const pdfInputRef = useRef<HTMLInputElement>(null);
@@ -93,11 +95,10 @@ export default function Admin() {
     setIsRunningAI(true);
     try {
       await adminFetch("/api/stories/fetch");
-      await adminFetch("/api/gov/fetch");
       queryClient.invalidateQueries({ queryKey: getGetStoriesQueryKey() });
-      toast({ title: "AI Refresh Complete", description: "Claude has fetched the latest news and government documents." });
+      toast({ title: "AI Refresh Complete", description: "Claude has fetched the latest news." });
     } catch (e) {
-      toast({ title: "AI Refresh Failed", description: "One or more fetch steps encountered an error.", variant: "destructive" });
+      toast({ title: "AI Refresh Failed", description: "News fetch encountered an error.", variant: "destructive" });
     } finally {
       setIsRunningAI(false);
     }
@@ -113,13 +114,31 @@ export default function Admin() {
     }
   };
 
-  const onFetchGovDocs = async () => {
+  const onCheckGov = async () => {
+    setIsCheckingGov(true);
     try {
-      await adminFetch("/api/gov/fetch");
-      toast({ title: "Success", description: "Triggered gov doc fetch" });
+      const result = await adminFetch("/api/gov/fetch");
+      const added = result?.added ?? 0;
+      toast({ title: "Gov Check Complete", description: added > 0 ? `${added} new document(s) added.` : "No new documents found." });
       queryClient.invalidateQueries({ queryKey: getGetStoriesQueryKey() });
     } catch (e) {
-      toast({ title: "Error", description: "Failed to fetch gov docs", variant: "destructive" });
+      toast({ title: "Error", description: "Failed to check for new gov docs", variant: "destructive" });
+    } finally {
+      setIsCheckingGov(false);
+    }
+  };
+
+  const onInitialLoadGov = async () => {
+    setIsLoadingGov(true);
+    try {
+      const result = await adminFetch("/api/gov/backfill");
+      const added = result?.added ?? 0;
+      toast({ title: "Initial Load Complete", description: `${added} document(s) imported from Google Sheet.` });
+      queryClient.invalidateQueries({ queryKey: getGetStoriesQueryKey() });
+    } catch (e) {
+      toast({ title: "Error", description: "Failed to run initial load", variant: "destructive" });
+    } finally {
+      setIsLoadingGov(false);
     }
   };
 
@@ -311,15 +330,36 @@ export default function Admin() {
                 {isRunningAI ? "Claude Is Running…" : "Run AI Refresh"}
               </Button>
               <p className="font-mono text-[11px] text-muted-foreground leading-relaxed">
-                Fetches latest news and government documents through Claude, then updates all stories.
+                Fetches latest news through Claude and updates all stories.
               </p>
               <div className="pt-2 border-t border-border space-y-3">
                 <Button onClick={onFetchNews} variant="outline" className="w-full justify-start rounded-none font-mono text-xs uppercase tracking-widest">
                   <RefreshCw size={14} className="mr-2" /> News Only
                 </Button>
-                <Button onClick={onFetchGovDocs} variant="outline" className="w-full justify-start rounded-none font-mono text-xs uppercase tracking-widest">
-                  <FileText size={14} className="mr-2" /> Gov Docs Only
+              </div>
+              <div className="pt-2 border-t border-border space-y-2">
+                <p className="font-mono text-[11px] text-muted-foreground leading-relaxed uppercase tracking-widest">Government Documents (Google Sheet)</p>
+                <Button
+                  onClick={onCheckGov}
+                  disabled={isCheckingGov || isLoadingGov}
+                  variant="outline"
+                  className="w-full justify-start rounded-none font-mono text-xs uppercase tracking-widest"
+                >
+                  <RefreshCw size={14} className={`mr-2 ${isCheckingGov ? "animate-spin" : ""}`} />
+                  {isCheckingGov ? "Checking…" : "Check for New"}
                 </Button>
+                <Button
+                  onClick={onInitialLoadGov}
+                  disabled={isCheckingGov || isLoadingGov}
+                  variant="outline"
+                  className="w-full justify-start rounded-none font-mono text-xs uppercase tracking-widest border-amber-600/50 text-amber-700 hover:bg-amber-50"
+                >
+                  <FileText size={14} className={`mr-2 ${isLoadingGov ? "animate-spin" : ""}`} />
+                  {isLoadingGov ? "Loading All…" : "Initial Load (Full Backfill)"}
+                </Button>
+                <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">
+                  "Check for New" scans the sheet and stops at the first known doc. "Initial Load" imports every row — use once or to backfill.
+                </p>
               </div>
             </div>
           </section>

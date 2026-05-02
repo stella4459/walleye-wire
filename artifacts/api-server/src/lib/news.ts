@@ -1,7 +1,10 @@
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const pdfParse = require("pdf-parse") as (buf: Buffer) => Promise<{ text: string; numpages: number }>;
 import { db } from "@workspace/db";
 import { storiesTable, seenDocsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { callClaude, parseArr } from "./claude";
+import { callClaude, parseArr, parseObj } from "./claude";
 import { logger } from "./logger";
 
 // ---------------------------------------------------------------------------
@@ -203,278 +206,274 @@ Each story object must have:
 }
 
 // ---------------------------------------------------------------------------
-// Port Clinton government documents (Ordinances, Resolutions, Council Minutes)
+// Port Clinton government documents — Google Sheet → PDF pipeline
+// Only Ordinances and Resolutions (no council minutes).
 // ---------------------------------------------------------------------------
 
-const DOC_CENTER_PAGE =
-  "https://www.portclinton.com/document_center/index.php";
+const SHEET_CSV_URL =
+  "https://docs.google.com/spreadsheets/d/1LBgYjObNAUICyw52PUDlJX-v1HG5AzRxptwtqS9_uDM/export?format=csv&gid=0";
 
-interface GovDoc {
-  label: string;   // visible text, e.g. "Ordinance 17-26"
-  title: string;   // descriptive title from href filename
-  fullUrl: string; // resolved absolute URL for source_url / linking
-  section: "Ordinances" | "Resolutions" | "CouncilMinutes";
-  sectionLabel: string;
+interface SheetDoc {
+  url: string;
+  type: "Ordinance" | "Resolution";
+  number: string;
+  date: string; // e.g. "April 28, 2026"
 }
 
-function extractTitle(href: string): string {
-  // Pull the filename from the path, strip extension and cache param
-  const raw = href.split("?")[0].split("/").pop() ?? href;
-  return decodeURIComponent(raw).replace(/\.pdf$/i, "").trim();
-}
+/** Parse the Google Sheet CSV and return rows newest-first (as listed in the sheet). */
+async function fetchSheetDocs(): Promise<SheetDoc[]> {
+  const res = await fetch(SHEET_CSV_URL, { signal: AbortSignal.timeout(15000) });
+  if (!res.ok) throw new Error(`Sheet fetch failed: ${res.status}`);
+  const csv = await res.text();
 
-async function parseDocumentCenter(): Promise<GovDoc[]> {
-  const html = await (
-    await fetch(DOC_CENTER_PAGE, {
-      headers: { "User-Agent": "TheWalleyeWire/1.0" },
-      signal: AbortSignal.timeout(15000),
-    })
-  ).text();
+  const lines = csv.trim().split(/\r?\n/);
+  // Skip header row
+  const dataLines = lines.slice(1);
 
-  const sections: Array<{
-    id: string;
-    section: GovDoc["section"];
-    label: string;
-  }> = [
-    { id: "sub-739", section: "Ordinances", label: "Ordinance" },
-    { id: "sub-730", section: "Resolutions", label: "Resolution" },
-    { id: "sub-448", section: "CouncilMinutes", label: "Council Meeting" },
-  ];
-
-  const docs: GovDoc[] = [];
-
-  for (const { id, section, label: sectionLabel } of sections) {
-    // Find the <ul class="file-group sub-XXX"> block
-    const start = html.indexOf(`name="${id}"`);
-    if (start === -1) continue;
-    const ulStart = html.indexOf("<ul", start);
-    if (ulStart === -1) continue;
-    const ulEnd = html.indexOf("</ul>", ulStart);
-    const block = ulEnd !== -1 ? html.slice(ulStart, ulEnd + 5) : html.slice(ulStart, ulStart + 50000);
-
-    // Extract all PDF links in this block
-    const linkRe = /<a\s+href="([^"]+\.pdf[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
-    let m: RegExpExecArray | null;
-    while ((m = linkRe.exec(block)) !== null) {
-      const href = m[1] as string;
-      // Skip non-document-center files (e.g. deep subdirectory paths for other services)
-      if (href.startsWith("Documents/")) continue;
-
-      const visibleText = (m[2] as string)
-        .replace(/<[^>]+>/g, "")
-        .trim();
-
-      let fullUrl: string;
-      try {
-        fullUrl = new URL(href, DOC_CENTER_PAGE).href;
-      } catch {
-        continue;
+  const docs: SheetDoc[] = [];
+  for (const line of dataLines) {
+    // Parse CSV — handle quoted fields containing commas
+    const fields: string[] = [];
+    let current = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        inQuotes = !inQuotes;
+      } else if (ch === "," && !inQuotes) {
+        fields.push(current.trim());
+        current = "";
+      } else {
+        current += ch;
       }
-
-      docs.push({
-        label: visibleText || extractTitle(href),
-        title: extractTitle(href),
-        fullUrl,
-        section,
-        sectionLabel,
-      });
     }
+    fields.push(current.trim());
+
+    const [url, rawType, number, date] = fields;
+    if (!url || !rawType) continue;
+
+    const type = rawType.trim() as "Ordinance" | "Resolution";
+    if (type !== "Ordinance" && type !== "Resolution") continue;
+
+    docs.push({ url: url.trim(), type, number: (number ?? "").trim(), date: (date ?? "").trim() });
   }
 
-  return docs;
+  return docs; // already newest-first from the sheet
+}
+
+/** Download a PDF and extract its text content using pdf-parse. Returns null on failure. */
+async function downloadPdfText(url: string): Promise<string | null> {
+  try {
+    logger.info({ url }, "[Gov] Downloading PDF");
+    const res = await fetch(url, {
+      headers: { "User-Agent": "TheWalleyeWire/1.0" },
+      signal: AbortSignal.timeout(25000),
+    });
+    if (!res.ok) {
+      logger.warn({ url, status: res.status }, "[Gov] PDF download failed");
+      return null;
+    }
+    const buffer = Buffer.from(await res.arrayBuffer());
+    const parsed = await pdfParse(buffer);
+    const text = parsed.text?.trim() ?? "";
+    if (text.length < 50) {
+      logger.warn({ url, chars: text.length }, "[Gov] PDF text too short");
+      return null;
+    }
+    logger.info({ url, chars: text.length }, "[Gov] PDF text extracted");
+    return text;
+  } catch (e) {
+    logger.warn({ err: e, url }, "[Gov] PDF extraction error");
+    return null;
+  }
+}
+
+/** Extract the document title from the first meaningful line of extracted PDF text. */
+function extractPdfTitle(text: string): string {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length >= 4);
+  return lines[0] ?? "";
+}
+
+/** Extract the body text (everything after the first meaningful line). */
+function extractPdfBody(text: string): string {
+  const lines = text.split(/\r?\n/).map((l) => l.trim());
+  const titleIdx = lines.findIndex((l) => l.length >= 4);
+  if (titleIdx === -1) return text.trim();
+  return lines
+    .slice(titleIdx + 1)
+    .join("\n")
+    .trim();
+}
+
+const GOV_SYSTEM = `You are a local government reporter for The Walleye Wire, Port Clinton Ohio's community news site.
+You have been given the text of a government document — either an Ordinance or a Resolution — from Port Clinton.
+
+Write a plain-English summary for everyday residents. Rules:
+- Use language that an average person can understand. No legal jargon.
+- Use neutral, descriptive language. Do NOT say the document was "passed," "approved," "adopted," or "enacted."
+  Use phrasing like: "proposes," "would," "concerns," "addresses," "is intended to," "calls for," "aims to."
+- Base everything ONLY on the text provided. Do not invent details.
+- Be factual and concise.
+
+Return ONLY a valid JSON object with exactly two fields:
+- summary: 1-2 plain-English sentences describing what the document is about and why it matters to residents.
+- body: 3-5 plain-English sentences expanding on the key provisions or intent of the document.`;
+
+/**
+ * Process a single sheet doc: download PDF, extract text, call Claude, store in DB.
+ * publishDate is the story_date shown to readers ("April 28, 2026" or today's date string).
+ * createdAtTs is the Unix timestamp used for sorting.
+ */
+async function processSheetDoc(
+  doc: SheetDoc,
+  publishDate: string,
+  createdAtTs: number
+): Promise<boolean> {
+  const pdfText = await downloadPdfText(doc.url);
+  if (!pdfText) return false;
+
+  const rawTitle = extractPdfTitle(pdfText);
+  const bodyText = extractPdfBody(pdfText).slice(0, 10000);
+
+  const userPrompt = `Document type: ${doc.type}
+Document number: ${doc.number}
+Date: ${doc.date}
+
+Full document text:
+---
+${pdfText.slice(0, 12000)}
+---
+
+Write a plain-English summary as described in your instructions.`;
+
+  try {
+    const raw = await callClaude([{ role: "user", content: userPrompt }], GOV_SYSTEM);
+    const s = parseObj(raw);
+    if (!s?.summary) {
+      logger.warn({ url: doc.url }, "[Gov] Claude returned no summary");
+      return false;
+    }
+
+    // Headline: use PDF first line, fall back to doc number + type if empty
+    const headline =
+      rawTitle ||
+      `${doc.type} ${doc.number}${doc.date ? ` — ${doc.date}` : ""}`;
+
+    await db.insert(storiesTable).values({
+      headline: headline.slice(0, 300),
+      category: "Government",
+      source_tag: doc.type,
+      summary: String(s.summary),
+      body: String(s.body ?? bodyText.slice(0, 1000)),
+      story_date: publishDate,
+      source_name: "Port Clinton City Council",
+      source_url: doc.url,
+      is_council: true,
+      council_votes: [],
+      created_at: createdAtTs,
+    });
+
+    logger.info({ url: doc.url, headline }, "[Gov] Story stored");
+    return true;
+  } catch (e) {
+    logger.error({ err: e, url: doc.url }, "[Gov] Claude/DB error");
+    return false;
+  }
 }
 
 /**
- * Returns true if a document appears to be within the last 6 months.
- * Tries to parse an explicit date from the label/title first; falls back to year.
+ * INITIAL LOAD — processes all documents from the Google Sheet.
+ * Uses the date from the sheet as the story_date.
+ * Skips documents already in the DB by source_url.
  */
-function isWithinLastSixMonths(doc: GovDoc): boolean {
-  const cutoff = new Date();
-  cutoff.setMonth(cutoff.getMonth() - 6);
+export async function runGovInitialLoad(): Promise<{ added: number; skipped: number; errors: number }> {
+  logger.info("[Gov] Starting initial load from Google Sheet...");
 
-  const text = `${doc.label} ${doc.title}`;
-
-  // Try full date patterns — matches "April 8, 2026" or "April 2026"
-  const fullDatePatterns = [
-    /([A-Za-z]+ \d{1,2},? \d{4})/,
-    /([A-Za-z]+ \d{4})/,
-  ];
-  for (const pat of fullDatePatterns) {
-    const m = text.match(pat);
-    if (m) {
-      const d = new Date(m[1]);
-      if (!isNaN(d.getTime())) return d >= cutoff;
-    }
-  }
-
-  // Try 4-digit year (e.g. "2026" or "2025")
-  const fullYearMatch = text.match(/\b(20\d{2})\b/);
-  if (fullYearMatch) {
-    const year = parseInt(fullYearMatch[1]);
-    const currentYear = new Date().getFullYear();
-    // Include current year always; previous year could overlap the 6-month window
-    return year >= currentYear - 1;
-  }
-
-  // Try 2-digit year suffix (e.g. "Ordinance 5-26" → 2026, "Resolution 14-25" → 2025)
-  const shortYearMatch = text.match(/-(\d{2})\b/);
-  if (shortYearMatch) {
-    const year = 2000 + parseInt(shortYearMatch[1]);
-    const currentYear = new Date().getFullYear();
-    return year >= currentYear - 1;
-  }
-
-  // No date info — include by default (rely on page-order slicing for recency)
-  return true;
-}
-
-async function processGovDocBatch(batch: GovDoc[]): Promise<number> {
-  const system = `You are a local government reporter for The Walleye Wire, the community news site for Port Clinton, Ohio.
-You will be given a list of city government documents (ordinances, resolutions, or council meeting minutes) from the Port Clinton city website.
-Each entry has a document number/label, a descriptive title, and the document type.
-
-For each document, produce a plain-English news story based solely on the title and document type.
-Do NOT invent specific vote counts, dollar amounts, or people's names unless they are clearly stated in the title.
-
-IMPORTANT LANGUAGE RULES by document type:
-- Council Minutes: Describe what the council discussed or addressed at the meeting. Use phrases like "The Port Clinton City Council met on [date] to address..." or "Topics at the [date] council meeting included..." You may reference agenda items as discussed without implying final outcomes unless the title states them clearly.
-- Ordinances: Describe what the ordinance concerns or proposes. Use neutral language such as "A proposed ordinance would..." or "Port Clinton has introduced an ordinance that..." — never write that an ordinance was passed, adopted, approved, or enacted unless the title explicitly says so.
-- Resolutions: Describe what the resolution covers or proposes. Use neutral language such as "A resolution has been filed that..." or "Port Clinton has put forward a resolution to..." — never write that a resolution was passed, adopted, or approved unless the title explicitly says so.
-
-Return ONLY a valid JSON array with one object per document, no markdown, no explanation.
-
-Each object must have:
-- doc_index: integer (1-based, matching the [N] prefix in the input)
-- headline: clear, plain-English headline (not legal jargon). For ordinances/resolutions, phrase as a proposal, not a completed action.
-- category: "Local Government"
-- source_tag: one of "Ordinance", "Resolution", "Council Minutes"
-- summary: 1-2 sentence plain-English summary of what the document is about and why it matters to residents
-- body: 2-3 sentences expanding on the summary. Stay factual; don't pad.
-- story_date: infer the date from the title/filename if possible (format "Month D, YYYY"); otherwise use current year
-- source_name: "Port Clinton City Council"
-- is_council: true
-- council_votes: [] (empty array; we don't have vote data from titles alone)`;
-
-  const docList = batch
-    .map(
-      (d, i) =>
-        `[${i + 1}] Type: ${d.sectionLabel}\nLabel: ${d.label}\nTitle: ${d.title}`
-    )
-    .join("\n\n---\n\n");
-
-  const userPrompt = `Below are ${batch.length} Port Clinton government document(s). Summarize each as a plain-English news story.\n\n${docList}\n\nReturn a JSON array with one object per document.`;
-
+  let docs: SheetDoc[];
   try {
-    const raw = await callClaude([{ role: "user", content: userPrompt }], system);
-    const stories = parseArr(raw) as Array<Record<string, unknown>>;
-    if (!stories.length) return 0;
+    docs = await fetchSheetDocs();
+  } catch (e) {
+    logger.error({ err: e }, "[Gov] Failed to fetch Google Sheet");
+    return { added: 0, skipped: 0, errors: 1 };
+  }
 
-    let added = 0;
-    for (const s of stories) {
-      const idx = Number(s.doc_index ?? 1) - 1;
-      const doc = batch[Math.max(0, Math.min(idx, batch.length - 1))];
+  logger.info(`[Gov] Sheet has ${docs.length} ordinances/resolutions`);
 
-      const existing = await db
-        .select({ id: storiesTable.id })
-        .from(storiesTable)
-        .where(eq(storiesTable.source_url, doc.fullUrl));
-      if (existing.length > 0) continue;
+  // Get all existing source_urls from DB
+  const existingRows = await db.select({ source_url: storiesTable.source_url }).from(storiesTable);
+  const existingUrls = new Set(existingRows.map((r) => r.source_url));
 
-      let createdAt = Math.floor(Date.now() / 1000);
-      try {
-        const parsed = new Date(String(s.story_date));
-        if (!isNaN(parsed.getTime()))
-          createdAt = Math.floor(parsed.getTime() / 1000);
-      } catch {}
+  let added = 0, skipped = 0, errors = 0;
 
-      await db.insert(storiesTable).values({
-        headline: String(s.headline || doc.title),
-        category: "Government",
-        source_tag: String(s.source_tag || "City Council"),
-        summary: String(s.summary || ""),
-        body: String(s.body || ""),
-        story_date: String(s.story_date || ""),
-        source_name: "Port Clinton City Council",
-        source_url: doc.fullUrl,
-        is_council: true,
-        council_votes: [],
-        created_at: createdAt,
-      });
-      added++;
+  for (const doc of docs) {
+    if (existingUrls.has(doc.url)) {
+      skipped++;
+      continue;
     }
 
-    logger.info(`[CityCouncil] Batch processed: ${added} stories added.`);
-    return added;
-  } catch (e) {
-    logger.error({ err: e }, "[CityCouncil] Batch error");
-    return 0;
+    // Use the sheet date as publish date; parse it for created_at sorting
+    const publishDate = doc.date;
+    let createdAtTs = Math.floor(Date.now() / 1000);
+    try {
+      const d = new Date(doc.date);
+      if (!isNaN(d.getTime())) createdAtTs = Math.floor(d.getTime() / 1000);
+    } catch {}
+
+    const ok = await processSheetDoc(doc, publishDate, createdAtTs);
+    if (ok) { added++; existingUrls.add(doc.url); }
+    else errors++;
+
+    // Brief pause between PDF downloads to be kind to the server
+    await new Promise((r) => setTimeout(r, 1000));
   }
+
+  logger.info(`[Gov] Initial load complete: added=${added} skipped=${skipped} errors=${errors}`);
+  return { added, skipped, errors };
 }
 
-export async function fetchPortClintonDocs(
-  backfill = false
-): Promise<{ added: number; error?: string }> {
-  logger.info(`[CityCouncil] Fetching docs (backfill=${backfill})...`);
+/**
+ * MAINTENANCE CHECK — scans the sheet from newest to oldest.
+ * Stops at the first URL already in the DB.
+ * New items use today's date as the story_date.
+ */
+export async function runGovMaintenanceCheck(): Promise<{ added: number; stopped: boolean; errors: number }> {
+  logger.info("[Gov] Running maintenance check from Google Sheet...");
 
+  let docs: SheetDoc[];
   try {
-    const allDocs = await parseDocumentCenter();
-    logger.info(
-      `[CityCouncil] Found ${allDocs.length} total docs on page (ordinances + resolutions + minutes).`
-    );
-
-    // Which URLs have we already stored?
-    const existingRows = await db
-      .select({ source_url: storiesTable.source_url })
-      .from(storiesTable);
-    const existingUrls = new Set(existingRows.map((r) => r.source_url));
-
-    const isNew = (d: GovDoc) => !existingUrls.has(d.fullUrl);
-    const isRecent = (d: GovDoc) => isWithinLastSixMonths(d);
-
-    let toProcess: GovDoc[];
-    const bySection = ["Ordinances", "Resolutions", "CouncilMinutes"] as const;
-    if (backfill) {
-      // Take up to 10 recent docs per section, within the last 6 months
-      toProcess = bySection.flatMap((sec) =>
-        allDocs.filter((d) => d.section === sec && isNew(d) && isRecent(d)).slice(0, 10)
-      );
-      logger.info(`[CityCouncil] Backfill: ${toProcess.length} new docs within last 6 months.`);
-    } else {
-      // Normal run: up to 5 most recent per section, within the last 6 months
-      toProcess = bySection.flatMap((sec) =>
-        allDocs.filter((d) => d.section === sec && isNew(d) && isRecent(d)).slice(0, 5)
-      );
-    }
-
-    if (!toProcess.length) {
-      logger.info("[CityCouncil] No new docs found.");
-      return { added: 0 };
-    }
-
-    logger.info(`[CityCouncil] Processing ${toProcess.length} new docs...`);
-
-    let totalAdded = 0;
-    const batchSize = 5;
-    for (let i = 0; i < toProcess.length; i += batchSize) {
-      const batch = toProcess.slice(i, i + batchSize);
-      const added = await processGovDocBatch(batch);
-      totalAdded += added;
-      if (i + batchSize < toProcess.length) {
-        await new Promise((r) => setTimeout(r, 1500));
-      }
-    }
-
-    logger.info(`[CityCouncil] Total added: ${totalAdded}`);
-    return { added: totalAdded };
+    docs = await fetchSheetDocs();
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    logger.error({ err: e }, "[CityCouncil] Error fetching docs");
-    return { added: 0, error: msg };
+    logger.error({ err: e }, "[Gov] Failed to fetch Google Sheet");
+    return { added: 0, stopped: false, errors: 1 };
   }
-}
 
-export async function fetchAllGovDocs(
-  backfill = false
-): Promise<{ portclinton: { added: number; error?: string } }> {
-  return { portclinton: await fetchPortClintonDocs(backfill) };
+  const existingRows = await db.select({ source_url: storiesTable.source_url }).from(storiesTable);
+  const existingUrls = new Set(existingRows.map((r) => r.source_url));
+
+  const today = new Date();
+  const todayStr = today.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  const nowTs = Math.floor(today.getTime() / 1000);
+
+  let added = 0, errors = 0, stopped = false;
+
+  for (const doc of docs) {
+    if (existingUrls.has(doc.url)) {
+      logger.info({ url: doc.url }, "[Gov] Hit known doc — stopping maintenance scan");
+      stopped = true;
+      break;
+    }
+
+    // New doc — use today's date as the published date
+    const ok = await processSheetDoc(doc, todayStr, nowTs);
+    if (ok) { added++; existingUrls.add(doc.url); }
+    else errors++;
+
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+
+  logger.info(`[Gov] Maintenance done: added=${added} stopped=${stopped} errors=${errors}`);
+  return { added, stopped, errors };
 }

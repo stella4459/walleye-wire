@@ -9,7 +9,7 @@ import { storiesTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { GetStoriesQueryParams, SubmitStoryBody } from "@workspace/api-zod";
 import { requireAdmin } from "../middlewares/admin";
-import { fetchGeneralNews, fetchAllGovDocs } from "../lib/news";
+import { fetchGeneralNews, runGovMaintenanceCheck, runGovInitialLoad } from "../lib/news";
 import { callClaude, callClaudeWithDocs, parseObj } from "../lib/claude";
 import { logger } from "../lib/logger";
 
@@ -130,13 +130,25 @@ router.post("/stories/fetch", requireAdmin, async (req, res) => {
   }
 });
 
+// Maintenance check — scans sheet top-to-bottom, stops at first known URL, uses today's date
 router.post("/gov/fetch", requireAdmin, async (req, res) => {
   try {
-    const result = await fetchAllGovDocs(false);
+    const result = await runGovMaintenanceCheck();
     res.json(result);
   } catch (e) {
-    req.log.error({ err: e }, "Error fetching gov docs");
-    res.status(500).json({ error: "Failed to fetch gov docs" });
+    req.log.error({ err: e }, "Error running gov maintenance check");
+    res.status(500).json({ error: "Failed to check for new gov docs" });
+  }
+});
+
+// Initial load — processes every doc in the sheet, uses the sheet's date column
+router.post("/gov/backfill", requireAdmin, async (req, res) => {
+  try {
+    const result = await runGovInitialLoad();
+    res.json(result);
+  } catch (e) {
+    req.log.error({ err: e }, "Error running gov initial load");
+    res.status(500).json({ error: "Failed to run initial load" });
   }
 });
 
