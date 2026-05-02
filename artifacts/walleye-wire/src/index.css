@@ -60,19 +60,19 @@
   --background: 40 30% 96%;
   --foreground: 0 0% 10%;
 
-  --border: 36 15% 85%;
-  --input: 36 15% 85%;
-  --ring: 352 72% 30%;
+  --border: 36 15% 82%;
+  --input: 36 15% 82%;
+  --ring: 352 72% 32%;
 
   --card: 0 0% 100%;
   --card-foreground: 0 0% 10%;
-  --card-border: 36 15% 85%;
+  --card-border: 36 15% 82%;
 
   --popover: 0 0% 100%;
   --popover-foreground: 0 0% 10%;
-  --popover-border: 36 15% 85%;
+  --popover-border: 36 15% 82%;
 
-  /* Dark crimson #8B1923 */
+  /* Dark crimson — passes 4.5:1 on cream background */
   --primary: 352 72% 32%;
   --primary-foreground: 0 0% 100%;
 
@@ -80,7 +80,8 @@
   --secondary-foreground: 352 60% 30%;
 
   --muted: 36 20% 93%;
-  --muted-foreground: 0 0% 45%;
+  /* Darkened to #616161 — 5.7:1 contrast on cream background (WCAG AA pass) */
+  --muted-foreground: 0 0% 38%;
 
   --accent: 36 25% 91%;
   --accent-foreground: 0 0% 15%;
@@ -115,6 +116,35 @@
   body {
     @apply font-serif antialiased bg-background text-foreground;
   }
+
+  /* High-visibility focus rings for keyboard navigation (WCAG 2.4.7) */
+  :focus-visible {
+    outline: 3px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+}
+
+/* Skip navigation link (WCAG 2.4.1) */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 0;
+  z-index: 9999;
+  padding: 0.75rem 1.25rem;
+  background: hsl(var(--nav));
+  color: #fff;
+  font-family: var(--app-font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-decoration: none;
+  border-bottom-right-radius: 4px;
+}
+.skip-link:focus {
+  top: 0;
+  outline: 3px solid hsl(var(--ring));
+  outline-offset: 2px;
 }
 
 @keyframes ticker {
@@ -132,4 +162,11 @@
 
 .ticker-container:hover .animate-ticker {
   animation-play-state: paused;
+}
+
+/* Respect user preference for reduced motion (WCAG 2.3.3) */
+@media (prefers-reduced-motion: reduce) {
+  .animate-ticker {
+    animation: none;
+  }
 }

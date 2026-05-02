@@ -12,6 +12,7 @@ interface StoryCardProps {
 
 export function StoryCard({ story, index = 0 }: StoryCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const panelId = `story-panel-${story.id}`;
   const formattedDate = story.story_date ? format(new Date(story.story_date), "MMM d, yyyy") : "";
 
   return (
@@ -37,7 +38,7 @@ export function StoryCard({ story, index = 0 }: StoryCardProps) {
           </div>
           {formattedDate && (
             <span className="text-xs font-mono text-muted-foreground whitespace-nowrap flex items-center gap-1">
-              <CalendarIcon size={12} />
+              <CalendarIcon size={12} aria-hidden="true" />
               {formattedDate}
             </span>
           )}
@@ -76,10 +77,15 @@ export function StoryCard({ story, index = 0 }: StoryCardProps) {
           {(story.body || (story.council_votes && story.council_votes.length > 0)) && (
             <button 
               onClick={() => setExpanded(!expanded)}
+              aria-expanded={expanded}
+              aria-controls={panelId}
+              aria-label={expanded ? `Collapse: ${story.headline}` : `Read full story: ${story.headline}`}
               className="text-xs font-sans font-bold tracking-widest uppercase text-primary hover:text-primary/80 flex items-center gap-1 transition-colors"
             >
               {expanded ? "Close" : "Read"} 
-              {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              <span aria-hidden="true">
+                {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </span>
             </button>
           )}
         </div>
@@ -87,7 +93,10 @@ export function StoryCard({ story, index = 0 }: StoryCardProps) {
 
       <AnimatePresence>
         {expanded && (
-          <motion.div 
+          <motion.div
+            id={panelId}
+            role="region"
+            aria-label={story.headline}
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}

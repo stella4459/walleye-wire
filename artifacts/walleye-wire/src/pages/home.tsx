@@ -45,7 +45,7 @@ function WeatherWidget() {
 
   if (isLoading) {
     return (
-      <div className="bg-nav text-white/60 font-mono text-sm p-5">
+      <div className="bg-nav text-white font-mono text-sm p-5">
         Loading weather...
       </div>
     );
@@ -53,7 +53,7 @@ function WeatherWidget() {
 
   if (!weather?.current) {
     return (
-      <div className="bg-nav text-white/60 font-mono text-sm p-5">
+      <div className="bg-nav text-white font-mono text-sm p-5">
         Weather unavailable.
       </div>
     );
@@ -70,18 +70,22 @@ function WeatherWidget() {
       <div className="flex items-start justify-between">
         <div>
           <div className="text-5xl font-bold leading-none">{temp}&deg;</div>
-          <div className="mt-2 text-sm text-white/70 uppercase tracking-wider">{label}</div>
-          <div className="mt-1 text-xs text-white/50">
+          {/* text-white/80 = ~12:1 on dark bg ✓ */}
+          <div className="mt-2 text-sm text-white/80 uppercase tracking-wider">{label}</div>
+          {/* text-white/70 = ~9:1 on dark bg ✓ */}
+          <div className="mt-1 text-xs text-white/70">
             H: {high}&deg; &nbsp; L: {low}&deg;
           </div>
-          <div className="mt-1 text-xs text-white/50">
+          <div className="mt-1 text-xs text-white/70">
             Wind: {weather.current.windspeed_10m} mph &nbsp;&bull;&nbsp; Humidity: {weather.current.relativehumidity_2m}%
           </div>
         </div>
-        <Icon size={56} className="text-white/20 mt-1 shrink-0" />
+        {/* Decorative icon — aria-hidden ✓ */}
+        <Icon size={56} className="text-white/20 mt-1 shrink-0" aria-hidden="true" />
       </div>
-      <div className="mt-4 pt-3 border-t border-white/15">
-        <Link href="/weather" className="text-[11px] tracking-widest uppercase text-white/50 hover:text-white transition-colors">
+      <div className="mt-4 pt-3 border-t border-white/20">
+        {/* text-white/70 = ~9:1 on dark bg ✓ */}
+        <Link href="/weather" className="text-[11px] tracking-widest uppercase text-white/70 hover:text-white transition-colors">
           Full Forecast &rarr;
         </Link>
       </div>
