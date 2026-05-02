@@ -218,14 +218,18 @@ export async function fetchPortClintonDocs(
       })
     ).text();
 
+    const PAGE_URL = "https://www.portclinton.com/document_center/index.php";
     const allMatches = [...html.matchAll(/href="([^"]+\.pdf[^"]*)"/gi)]
       .map((m) => {
-        const u = m[1] as string;
-        return u.startsWith("http")
-          ? u
-          : "https://www.portclinton.com" + u;
+        try {
+          // Use the URL constructor so relative paths resolve correctly
+          return new URL(m[1] as string, PAGE_URL).href;
+        } catch {
+          return null;
+        }
       })
-      .filter((u) => /ordinance|minutes|council|resolution/i.test(u));
+      .filter((u): u is string => u !== null)
+      .filter((u) => /ordinance|minutes|council|resolution|agenda/i.test(u));
 
     const unique = [...new Set(allMatches)];
     const seenRows = await db.select().from(seenDocsTable);
