@@ -23,7 +23,8 @@ router.get("/stories", async (req, res) => {
       .limit(params.limit ?? 100);
 
     if (category && category !== "All") {
-      rows = rows.filter((r) => r.category === category);
+      const cats = category.split(",").map((c) => c.trim().toLowerCase());
+      rows = rows.filter((r) => cats.includes((r.category ?? "").toLowerCase()));
     }
     if (source_tag && source_tag !== "all") {
       rows = rows.filter((r) => r.source_tag === source_tag);
