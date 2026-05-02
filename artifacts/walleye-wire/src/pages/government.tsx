@@ -4,17 +4,19 @@ import { StoryCard } from "@/components/shared/StoryCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 
-const SOURCES = ["All", "City Council", "Ottawa County", "School Board", "Library"];
+const SOURCES = ["All", "Ordinance", "Resolution", "Council Minutes"];
 
 export default function Government() {
   const [filter, setFilter] = useState<string>("All");
-  
-  const queryParams = { 
+
+  const queryParams = {
     category: "Government",
-    ...(filter !== "All" && { source_tag: filter.toLowerCase().replace(" ", "_") }) 
+    ...(filter !== "All" && { source_tag: filter }),
   };
-  
-  const { data: stories, isLoading } = useGetStories(queryParams, { query: { queryKey: getGetStoriesQueryKey(queryParams) } });
+
+  const { data: stories, isLoading } = useGetStories(queryParams, {
+    query: { queryKey: getGetStoriesQueryKey(queryParams) },
+  });
 
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -23,12 +25,12 @@ export default function Government() {
           Local Government
         </h1>
         <p className="font-serif text-lg text-muted-foreground mt-4">
-          Records, resolutions, and raw council minutes from Port Clinton and Ottawa County.
+          Ordinances, resolutions, and council meeting minutes from Port Clinton City Hall.
         </p>
       </header>
-      
+
       <div className="flex flex-wrap gap-2 mb-8">
-        {SOURCES.map(source => (
+        {SOURCES.map((source) => (
           <Button
             key={source}
             variant={filter === source ? "default" : "outline"}
@@ -59,7 +61,9 @@ export default function Government() {
         </div>
       ) : (
         <div className="text-center py-20 bg-muted/30 border border-border rounded-sm">
-          <p className="font-serif text-lg text-muted-foreground">No government docs found for this filter.</p>
+          <p className="font-serif text-lg text-muted-foreground">
+            No government documents found. Run an AI refresh in the admin panel to populate.
+          </p>
         </div>
       )}
     </div>

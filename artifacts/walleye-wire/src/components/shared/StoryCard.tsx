@@ -25,13 +25,15 @@ export function StoryCard({ story, index = 0 }: StoryCardProps) {
       <div className="p-6 flex-grow flex flex-col">
         <div className="flex justify-between items-start mb-3 gap-4">
           <div className="flex flex-wrap gap-2">
-            {story.is_council && (
-              <Badge variant="outline" className="bg-primary/10 text-primary hover:bg-primary/20 font-mono text-[10px] tracking-wide border-primary/20 rounded-none">
-                CITY COUNCIL
-              </Badge>
-            )}
-            {story.source_tag && !story.is_council && (
-              <Badge variant="secondary" className="font-mono text-[10px] tracking-wide rounded-none bg-accent text-accent-foreground border-border">
+            {story.source_tag && (
+              <Badge
+                variant="outline"
+                className={
+                  story.is_council
+                    ? "bg-primary/10 text-primary hover:bg-primary/20 font-mono text-[10px] tracking-wide border-primary/20 rounded-none"
+                    : "font-mono text-[10px] tracking-wide rounded-none bg-accent text-accent-foreground border-border"
+                }
+              >
                 {story.source_tag.toUpperCase()}
               </Badge>
             )}

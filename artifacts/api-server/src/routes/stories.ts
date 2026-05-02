@@ -16,18 +16,30 @@ router.get("/stories", async (req, res) => {
     const params = parsed.success ? parsed.data : {};
     const { category, source_tag } = params;
 
+    // Always fetch a large pool first, then apply category/source_tag filters in JS,
+    // then slice to the requested limit. This avoids the SQL LIMIT cutting out records
+    // that would have matched the filter (e.g., government stories with older timestamps).
+    const fetchLimit = 500;
+
     let rows = await db
       .select()
       .from(storiesTable)
       .orderBy(desc(storiesTable.created_at))
-      .limit(params.limit ?? 100);
+      .limit(fetchLimit);
 
     if (category && category !== "All") {
       const cats = category.split(",").map((c) => c.trim().toLowerCase());
       rows = rows.filter((r) => cats.includes((r.category ?? "").toLowerCase()));
     }
     if (source_tag && source_tag !== "all") {
-      rows = rows.filter((r) => r.source_tag === source_tag);
+      rows = rows.filter((r) =>
+        (r.source_tag ?? "").toLowerCase() === source_tag.toLowerCase()
+      );
+    }
+
+    // Apply the requested limit after filtering
+    if (params.limit) {
+      rows = rows.slice(0, params.limit);
     }
 
     res.json(

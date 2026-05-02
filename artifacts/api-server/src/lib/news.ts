@@ -1,7 +1,7 @@
 import { db } from "@workspace/db";
 import { storiesTable, seenDocsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { callClaude, callClaudeWithDocs, parseArr } from "./claude";
+import { callClaude, parseArr } from "./claude";
 import { logger } from "./logger";
 
 // ---------------------------------------------------------------------------
@@ -203,169 +203,132 @@ Each story object must have:
 }
 
 // ---------------------------------------------------------------------------
-// City Council PDF fetch
+// Port Clinton government documents (Ordinances, Resolutions, Council Minutes)
 // ---------------------------------------------------------------------------
 
-export async function fetchPortClintonDocs(
-  backfill = false
-): Promise<{ added: number; error?: string }> {
-  logger.info(`[CityCouncil] Fetching docs (backfill=${backfill})...`);
+const DOC_CENTER_PAGE =
+  "https://www.portclinton.com/document_center/index.php";
 
-  try {
-    const html = await (
-      await fetch("https://www.portclinton.com/document_center/index.php", {
-        signal: AbortSignal.timeout(12000),
-      })
-    ).text();
-
-    const PAGE_URL = "https://www.portclinton.com/document_center/index.php";
-    const allMatches = [...html.matchAll(/href="([^"]+\.pdf[^"]*)"/gi)]
-      .map((m) => {
-        try {
-          // Use the URL constructor so relative paths resolve correctly
-          return new URL(m[1] as string, PAGE_URL).href;
-        } catch {
-          return null;
-        }
-      })
-      .filter((u): u is string => u !== null)
-      .filter((u) => /ordinance|minutes|council|resolution|agenda/i.test(u));
-
-    const unique = [...new Set(allMatches)];
-    const seenRows = await db.select().from(seenDocsTable);
-    const seenUrls = new Set(seenRows.map((r) => r.url));
-
-    let toProcess: string[];
-    if (backfill) {
-      toProcess = unique.filter(
-        (u) =>
-          (/2026/i.test(u) ||
-            /january.*2026|february.*2026|march.*2026|april.*2026/i.test(
-              decodeURIComponent(u)
-            )) &&
-          !seenUrls.has(u)
-      );
-      logger.info(
-        `[CityCouncil] Backfill: found ${toProcess.length} 2026 docs.`
-      );
-    } else {
-      toProcess = unique.filter((u) => !seenUrls.has(u)).slice(0, 5);
-    }
-
-    if (!toProcess.length) {
-      logger.info("[CityCouncil] No new docs found.");
-      return { added: 0 };
-    }
-
-    let totalAdded = 0;
-    const batchSize = 3;
-    for (let i = 0; i < toProcess.length; i += batchSize) {
-      const batch = toProcess.slice(i, i + batchSize);
-      const added = await processCouncilBatch(batch);
-      totalAdded += added;
-
-      await db
-        .insert(seenDocsTable)
-        .values(
-          batch.map((u) => ({ url: u, seen_at: Math.floor(Date.now() / 1000) }))
-        )
-        .onConflictDoNothing();
-
-      if (i + batchSize < toProcess.length) {
-        await new Promise((r) => setTimeout(r, 2000));
-      }
-    }
-
-    logger.info(`[CityCouncil] Total added: ${totalAdded}`);
-    return { added: totalAdded };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    logger.error({ err: e }, "[CityCouncil] Error fetching docs");
-    return { added: 0, error: msg };
-  }
+interface GovDoc {
+  label: string;   // visible text, e.g. "Ordinance 17-26"
+  title: string;   // descriptive title from href filename
+  fullUrl: string; // resolved absolute URL for source_url / linking
+  section: "Ordinances" | "Resolutions" | "CouncilMinutes";
+  sectionLabel: string;
 }
 
-async function downloadPdf(url: string): Promise<Buffer | null> {
-  try {
-    const res = await fetch(url, {
+function extractTitle(href: string): string {
+  // Pull the filename from the path, strip extension and cache param
+  const raw = href.split("?")[0].split("/").pop() ?? href;
+  return decodeURIComponent(raw).replace(/\.pdf$/i, "").trim();
+}
+
+async function parseDocumentCenter(): Promise<GovDoc[]> {
+  const html = await (
+    await fetch(DOC_CENTER_PAGE, {
       headers: { "User-Agent": "TheWalleyeWire/1.0" },
-      signal: AbortSignal.timeout(20000),
-    });
-    if (!res.ok) {
-      logger.warn(`[CityCouncil] PDF download failed ${res.status}: ${url}`);
-      return null;
+      signal: AbortSignal.timeout(15000),
+    })
+  ).text();
+
+  const sections: Array<{
+    id: string;
+    section: GovDoc["section"];
+    label: string;
+  }> = [
+    { id: "sub-739", section: "Ordinances", label: "Ordinance" },
+    { id: "sub-730", section: "Resolutions", label: "Resolution" },
+    { id: "sub-448", section: "CouncilMinutes", label: "Council Meeting" },
+  ];
+
+  const docs: GovDoc[] = [];
+
+  for (const { id, section, label: sectionLabel } of sections) {
+    // Find the <ul class="file-group sub-XXX"> block
+    const start = html.indexOf(`name="${id}"`);
+    if (start === -1) continue;
+    const ulStart = html.indexOf("<ul", start);
+    if (ulStart === -1) continue;
+    const ulEnd = html.indexOf("</ul>", ulStart);
+    const block = ulEnd !== -1 ? html.slice(ulStart, ulEnd + 5) : html.slice(ulStart, ulStart + 50000);
+
+    // Extract all PDF links in this block
+    const linkRe = /<a\s+href="([^"]+\.pdf[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
+    let m: RegExpExecArray | null;
+    while ((m = linkRe.exec(block)) !== null) {
+      const href = m[1] as string;
+      // Skip non-document-center files (e.g. deep subdirectory paths for other services)
+      if (href.startsWith("Documents/")) continue;
+
+      const visibleText = (m[2] as string)
+        .replace(/<[^>]+>/g, "")
+        .trim();
+
+      let fullUrl: string;
+      try {
+        fullUrl = new URL(href, DOC_CENTER_PAGE).href;
+      } catch {
+        continue;
+      }
+
+      docs.push({
+        label: visibleText || extractTitle(href),
+        title: extractTitle(href),
+        fullUrl,
+        section,
+        sectionLabel,
+      });
     }
-    const buf = await res.arrayBuffer();
-    return Buffer.from(buf);
-  } catch (e) {
-    logger.warn({ err: e }, `[CityCouncil] PDF download error: ${url}`);
-    return null;
   }
+
+  return docs;
 }
 
-async function processCouncilBatch(urls: string[]): Promise<number> {
-  const system = `You are a local government reporter for The Walleye Wire in Port Clinton, Ohio.
-You will be given PDF documents from the Port Clinton city website — ordinances, resolutions, and meeting minutes.
+async function processGovDocBatch(batch: GovDoc[]): Promise<number> {
+  const system = `You are a local government reporter for The Walleye Wire, the community news site for Port Clinton, Ohio.
+You will be given a list of city government documents (ordinances, resolutions, or council meeting minutes) from the Port Clinton city website.
+Each entry has a document number/label, a descriptive title, and the document type.
 
-Read each document and return a JSON array with one story object per document.
+For each document, produce a plain-English news story based solely on the title and document type.
+Do NOT invent specific vote counts, dollar amounts, or people's names unless they are clearly stated in the title.
 
-Each story object must have:
-- headline: plain English title of what was decided or discussed
+Return ONLY a valid JSON array with one object per document, no markdown, no explanation.
+
+Each object must have:
+- doc_index: integer (1-based, matching the [N] prefix in the input)
+- headline: clear, plain-English headline (not legal jargon)
 - category: "Local Government"
-- source_tag: "City Council"
-- summary: 1-2 sentences in plain English — what happened and why it matters to residents
-- body: 3-5 sentences explaining the decision. Avoid legal jargon. Include vote counts if available.
-- story_date: date of the meeting or ordinance in format "Month D, YYYY"
+- source_tag: one of "Ordinance", "Resolution", "Council Minutes"
+- summary: 1-2 sentence plain-English summary of what the document is about and why it matters to residents
+- body: 2-3 sentences expanding on the summary. Stay factual; don't pad.
+- story_date: infer the date from the title/filename if possible (format "Month D, YYYY"); otherwise use current year
 - source_name: "Port Clinton City Council"
-- source_url: MUST be the document title/URL passed in — do not change it
 - is_council: true
-- council_votes: array of {motion: string, vote: "PASSED" | "FAILED" | "TABLED"}
+- council_votes: [] (empty array; we don't have vote data from titles alone)`;
 
-Return ONLY the JSON array, no markdown, no explanation.`;
+  const docList = batch
+    .map(
+      (d, i) =>
+        `[${i + 1}] Type: ${d.sectionLabel}\nLabel: ${d.label}\nTitle: ${d.title}`
+    )
+    .join("\n\n---\n\n");
 
-  // Download PDFs in parallel
-  const downloads = await Promise.all(
-    urls.map(async (url) => ({ url, buf: await downloadPdf(url) }))
-  );
-
-  const docs = downloads.filter((d) => d.buf !== null);
-
-  if (!docs.length) {
-    logger.warn("[CityCouncil] No PDFs downloaded successfully.");
-    return 0;
-  }
+  const userPrompt = `Below are ${batch.length} Port Clinton government document(s). Summarize each as a plain-English news story.\n\n${docList}\n\nReturn a JSON array with one object per document.`;
 
   try {
-    const pdfDocs = docs.map((d) => ({
-      base64: d.buf!.toString("base64"),
-      sourceUrl: d.url,
-    }));
-
-    const urlList = docs.map((d, i) => `Document ${i + 1}: ${d.url}`).join("\n");
-    const userPrompt = `Please read each attached PDF document and summarize it as a news story. Use the document URLs listed below as the source_url for each story:\n\n${urlList}\n\nReturn a JSON array with one story per document.`;
-
-    const raw = await callClaudeWithDocs(pdfDocs, userPrompt, system);
+    const raw = await callClaude([{ role: "user", content: userPrompt }], system);
     const stories = parseArr(raw) as Array<Record<string, unknown>>;
-
     if (!stories.length) return 0;
 
     let added = 0;
     for (const s of stories) {
-      // Match back to a real URL from the batch
-      const sUrl = String(s.source_url || "");
-      const matchedUrl =
-        docs.find(
-          (d) =>
-            sUrl === d.url ||
-            d.url.includes(sUrl) ||
-            sUrl.includes(d.url.split("/").pop()?.split("?")[0] || "")
-        )?.url ?? docs[0].url;
+      const idx = Number(s.doc_index ?? 1) - 1;
+      const doc = batch[Math.max(0, Math.min(idx, batch.length - 1))];
 
       const existing = await db
         .select({ id: storiesTable.id })
         .from(storiesTable)
-        .where(eq(storiesTable.source_url, matchedUrl));
-
+        .where(eq(storiesTable.source_url, doc.fullUrl));
       if (existing.length > 0) continue;
 
       let createdAt = Math.floor(Date.now() / 1000);
@@ -376,17 +339,16 @@ Return ONLY the JSON array, no markdown, no explanation.`;
       } catch {}
 
       await db.insert(storiesTable).values({
-        headline: String(s.headline || ""),
-        category: "Local Government",
-        source_tag: "City Council",
+        headline: String(s.headline || doc.title),
+        category: "Government",
+        source_tag: String(s.source_tag || "City Council"),
         summary: String(s.summary || ""),
         body: String(s.body || ""),
         story_date: String(s.story_date || ""),
         source_name: "Port Clinton City Council",
-        source_url: matchedUrl,
+        source_url: doc.fullUrl,
         is_council: true,
-        council_votes:
-          (s.council_votes as Array<{ motion: string; vote: string }>) || [],
+        council_votes: [],
         created_at: createdAt,
       });
       added++;
@@ -397,6 +359,68 @@ Return ONLY the JSON array, no markdown, no explanation.`;
   } catch (e) {
     logger.error({ err: e }, "[CityCouncil] Batch error");
     return 0;
+  }
+}
+
+export async function fetchPortClintonDocs(
+  backfill = false
+): Promise<{ added: number; error?: string }> {
+  logger.info(`[CityCouncil] Fetching docs (backfill=${backfill})...`);
+
+  try {
+    const allDocs = await parseDocumentCenter();
+    logger.info(
+      `[CityCouncil] Found ${allDocs.length} total docs on page (ordinances + resolutions + minutes).`
+    );
+
+    // Which URLs have we already stored?
+    const existingRows = await db
+      .select({ source_url: storiesTable.source_url })
+      .from(storiesTable);
+    const existingUrls = new Set(existingRows.map((r) => r.source_url));
+
+    const isNew = (d: GovDoc) => !existingUrls.has(d.fullUrl);
+
+    let toProcess: GovDoc[];
+    if (backfill) {
+      // Take up to 10 recent docs per section
+      const bySection = ["Ordinances", "Resolutions", "CouncilMinutes"] as const;
+      toProcess = bySection.flatMap((sec) =>
+        allDocs.filter((d) => d.section === sec && isNew(d)).slice(0, 10)
+      );
+      logger.info(`[CityCouncil] Backfill: ${toProcess.length} new docs.`);
+    } else {
+      // Normal run: up to 5 most recent per section
+      const bySection = ["Ordinances", "Resolutions", "CouncilMinutes"] as const;
+      toProcess = bySection.flatMap((sec) =>
+        allDocs.filter((d) => d.section === sec && isNew(d)).slice(0, 5)
+      );
+    }
+
+    if (!toProcess.length) {
+      logger.info("[CityCouncil] No new docs found.");
+      return { added: 0 };
+    }
+
+    logger.info(`[CityCouncil] Processing ${toProcess.length} new docs...`);
+
+    let totalAdded = 0;
+    const batchSize = 5;
+    for (let i = 0; i < toProcess.length; i += batchSize) {
+      const batch = toProcess.slice(i, i + batchSize);
+      const added = await processGovDocBatch(batch);
+      totalAdded += added;
+      if (i + batchSize < toProcess.length) {
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    }
+
+    logger.info(`[CityCouncil] Total added: ${totalAdded}`);
+    return { added: totalAdded };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    logger.error({ err: e }, "[CityCouncil] Error fetching docs");
+    return { added: 0, error: msg };
   }
 }
 
