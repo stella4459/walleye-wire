@@ -140,43 +140,12 @@ function StorySectionPreview({
 }
 
 export default function Home() {
-  const { data: stories, isLoading } = useGetStories({ limit: 12 }, { query: { queryKey: getGetStoriesQueryKey({ limit: 12 }) } });
-
   return (
     <div className="w-full">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-12">
 
-        {/* Latest Stories */}
-        <div>
-          <SectionHeader>Latest Stories</SectionHeader>
-
-          {isLoading ? (
-            <div className="space-y-4">
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className="space-y-2">
-                  <Skeleton className="h-5 w-3/4" />
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-5/6" />
-                </div>
-              ))}
-            </div>
-          ) : stories && stories.length > 0 ? (
-            <div className="space-y-5">
-              {stories.map((story, i) => (
-                <StoryCard key={story.id} story={story} index={i} />
-              ))}
-            </div>
-          ) : (
-            <div className="border border-border py-12 px-6 text-center bg-card">
-              <p className="font-mono text-xs text-muted-foreground tracking-wide uppercase">
-                No stories yet &mdash; check back soon.
-              </p>
-            </div>
-          )}
-        </div>
-
         {/* Community News + Local Government section previews */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-10 border-t border-border pt-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
           <StorySectionPreview
             category="Community,General,Weather"
             label="Community News"
