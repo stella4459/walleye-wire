@@ -13,7 +13,16 @@ interface StoryCardProps {
 export function StoryCard({ story, index = 0 }: StoryCardProps) {
   const [expanded, setExpanded] = useState(false);
   const panelId = `story-panel-${story.id}`;
-  const formattedDate = story.story_date ? format(new Date(story.story_date), "MMM d, yyyy") : "";
+  const formattedDate = (() => {
+    if (!story.story_date) return "";
+    try {
+      const d = new Date(story.story_date);
+      if (isNaN(d.getTime())) return story.story_date;
+      return format(d, "MMM d, yyyy");
+    } catch {
+      return story.story_date;
+    }
+  })();
 
   return (
     <motion.article 
