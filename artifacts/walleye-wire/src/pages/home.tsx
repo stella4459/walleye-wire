@@ -1,42 +1,89 @@
-import { useGetStories, getGetStoriesQueryKey, useGetStats, getGetStatsQueryKey } from "@workspace/api-client-react";
-import { Ticker } from "@/components/shared/Ticker";
+import { useGetStories, getGetStoriesQueryKey, useGetWeather, getGetWeatherQueryKey } from "@workspace/api-client-react";
 import { StoryCard } from "@/components/shared/StoryCard";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Cloud, CloudRain, CloudLightning, Snowflake, Sun } from "lucide-react";
+import { Link } from "wouter";
 
-function StatsFooter() {
-  const { data: stats } = useGetStats({ query: { queryKey: getGetStatsQueryKey() } });
-  
-  if (!stats) return null;
-  
+function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
-    <div className="bg-primary text-primary-foreground py-12 mt-12 border-t-4 border-foreground">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <h2 className="font-headline text-3xl mb-8 tracking-wider">The Wire by the Numbers</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 font-mono">
-          <div>
-            <div className="text-4xl font-bold mb-2">{stats.total}</div>
-            <div className="text-sm uppercase tracking-widest opacity-80">Total Stories</div>
+    <div className="mb-5">
+      <h2 className="font-mono text-xs font-bold tracking-[0.2em] uppercase text-primary">
+        {children}
+      </h2>
+      <div className="h-[2px] bg-primary mt-1.5" />
+      <div className="h-px bg-primary/25 mt-0.5" />
+    </div>
+  );
+}
+
+function getWeatherLabel(code: number | undefined) {
+  if (code === undefined) return "Unknown";
+  if (code === 0) return "Clear Sky";
+  if (code <= 3) return "Partly Cloudy";
+  if (code <= 48) return "Foggy";
+  if (code <= 67) return "Rain";
+  if (code <= 77) return "Snow";
+  if (code <= 82) return "Rain Showers";
+  if (code <= 86) return "Snow Showers";
+  if (code <= 99) return "Thunderstorm";
+  return "Unknown";
+}
+
+function getWeatherIcon(code: number | undefined) {
+  if (code === undefined) return Cloud;
+  if (code === 0) return Sun;
+  if (code <= 3) return Cloud;
+  if (code <= 67) return CloudRain;
+  if (code <= 77) return Snowflake;
+  if (code <= 82) return CloudRain;
+  if (code <= 99) return CloudLightning;
+  return Cloud;
+}
+
+function WeatherWidget() {
+  const { data: weather, isLoading } = useGetWeather({ query: { queryKey: getGetWeatherQueryKey() } });
+
+  if (isLoading) {
+    return (
+      <div className="bg-nav text-white/60 font-mono text-sm p-5">
+        Loading weather...
+      </div>
+    );
+  }
+
+  if (!weather?.current) {
+    return (
+      <div className="bg-nav text-white/60 font-mono text-sm p-5">
+        Weather unavailable.
+      </div>
+    );
+  }
+
+  const label = getWeatherLabel(weather.current.weathercode);
+  const Icon = getWeatherIcon(weather.current.weathercode);
+  const temp = Math.round(weather.current.temperature_2m ?? 0);
+  const high = Math.round(weather.daily?.temperature_2m_max?.[0] ?? 0);
+  const low = Math.round(weather.daily?.temperature_2m_min?.[0] ?? 0);
+
+  return (
+    <div className="bg-nav text-white p-5 font-mono">
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="text-5xl font-bold leading-none">{temp}&deg;</div>
+          <div className="mt-2 text-sm text-white/70 uppercase tracking-wider">{label}</div>
+          <div className="mt-1 text-xs text-white/50">
+            H: {high}&deg; &nbsp; L: {low}&deg;
           </div>
-          <div>
-            <div className="text-4xl font-bold mb-2">{stats.recent_count}</div>
-            <div className="text-sm uppercase tracking-widest opacity-80">Recent (30 days)</div>
-          </div>
-          <div>
-            <div className="text-4xl font-bold mb-2">{stats.pending_events}</div>
-            <div className="text-sm uppercase tracking-widest opacity-80">Pending Events</div>
-          </div>
-          <div>
-            <div className="text-sm uppercase tracking-widest opacity-80 mb-2 border-b border-primary-foreground/30 pb-2">By Category</div>
-            <ul className="space-y-1 text-sm">
-              {stats.by_category.map(c => (
-                <li key={c.category} className="flex justify-between">
-                  <span>{c.category || 'Uncategorized'}</span>
-                  <span>{c.count}</span>
-                </li>
-              ))}
-            </ul>
+          <div className="mt-1 text-xs text-white/50">
+            Wind: {weather.current.windspeed_10m} mph &nbsp;&bull;&nbsp; Humidity: {weather.current.relativehumidity_2m}%
           </div>
         </div>
+        <Icon size={56} className="text-white/20 mt-1 shrink-0" />
+      </div>
+      <div className="mt-4 pt-3 border-t border-white/15">
+        <Link href="/weather" className="text-[11px] tracking-widest uppercase text-white/50 hover:text-white transition-colors">
+          Full Forecast &rarr;
+        </Link>
       </div>
     </div>
   );
@@ -46,47 +93,46 @@ export default function Home() {
   const { data: stories, isLoading } = useGetStories({ limit: 12 }, { query: { queryKey: getGetStoriesQueryKey({ limit: 12 }) } });
 
   return (
-    <div className="flex flex-col w-full">
-      <Ticker />
-      
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <header className="mb-12 border-b-2 border-foreground pb-4">
-          <h1 className="font-headline text-5xl md:text-7xl font-bold text-foreground tracking-tight uppercase leading-none">
-            The Walleye Wire
-          </h1>
-          <p className="font-serif text-xl text-muted-foreground mt-4 max-w-2xl">
-            Independent, AI-powered local news for Port Clinton, Ohio and Ottawa County. Delivered with Lake Erie grit.
-          </p>
-        </header>
+    <div className="w-full">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-        <div className="flex justify-between items-end mb-8">
-          <h2 className="font-sans font-bold text-xl uppercase tracking-widest text-foreground">Latest Dispatches</h2>
-        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Stories — 2/3 width */}
+          <div className="lg:col-span-2">
+            <SectionHeader>Latest Stories</SectionHeader>
 
-        {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="flex flex-col space-y-3">
-                <Skeleton className="h-[200px] w-full rounded-sm" />
-                <Skeleton className="h-4 w-2/3" />
-                <Skeleton className="h-4 w-1/2" />
+            {isLoading ? (
+              <div className="space-y-4">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="space-y-2">
+                    <Skeleton className="h-5 w-3/4" />
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-5/6" />
+                  </div>
+                ))}
               </div>
-            ))}
+            ) : stories && stories.length > 0 ? (
+              <div className="space-y-5">
+                {stories.map((story, i) => (
+                  <StoryCard key={story.id} story={story} index={i} />
+                ))}
+              </div>
+            ) : (
+              <div className="border border-border py-12 px-6 text-center bg-card">
+                <p className="font-mono text-xs text-muted-foreground tracking-wide uppercase">
+                  No stories yet &mdash; check back soon.
+                </p>
+              </div>
+            )}
           </div>
-        ) : stories && stories.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-max">
-            {stories.map((story, i) => (
-              <StoryCard key={story.id} story={story} index={i} />
-            ))}
+
+          {/* Sidebar — 1/3 width */}
+          <div className="lg:col-span-1">
+            <SectionHeader>Weather &middot; Port Clinton</SectionHeader>
+            <WeatherWidget />
           </div>
-        ) : (
-          <div className="text-center py-20 bg-muted/30 border border-border rounded-sm">
-            <p className="font-serif text-lg text-muted-foreground">No stories rolling in off the wire just yet.</p>
-          </div>
-        )}
+        </div>
       </div>
-      
-      <StatsFooter />
     </div>
   );
 }

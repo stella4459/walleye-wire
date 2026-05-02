@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { Menu, X } from "lucide-react";
 import { useState } from "react";
+import { Ticker } from "@/components/shared/Ticker";
 
 export function Navbar() {
   const [location] = useLocation();
@@ -9,67 +10,82 @@ export function Navbar() {
   const links = [
     { href: "/", label: "Home" },
     { href: "/community", label: "Community" },
-    { href: "/government", label: "Government" },
+    { href: "/government", label: "Local Government" },
     { href: "/calendar", label: "Calendar" },
     { href: "/weather", label: "Weather" },
   ];
 
-  return (
-    <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between">
-          <div className="flex-shrink-0">
-            <Link href="/" className="font-headline text-3xl font-bold tracking-wider text-primary hover:text-primary/90 transition-colors">
-              THE WALLEYE WIRE
-            </Link>
-          </div>
-          
-          <nav className="hidden md:flex space-x-8">
-            {links.map((link) => (
-              <Link 
-                key={link.href} 
-                href={link.href}
-                className={`font-sans text-sm font-semibold tracking-wide uppercase transition-colors hover:text-primary ${
-                  location === link.href ? "text-primary border-b-2 border-primary pb-1" : "text-foreground"
-                }`}
-              >
-                {link.label}
-              </Link>
-            ))}
-          </nav>
+  const isActive = (href: string) => location === href;
 
-          <div className="md:hidden">
-            <button
-              onClick={() => setIsOpen(!isOpen)}
-              className="text-foreground hover:text-primary transition-colors p-2"
-              aria-label="Toggle menu"
-            >
-              {isOpen ? <X size={24} /> : <Menu size={24} />}
-            </button>
-          </div>
-        </div>
+  return (
+    <header className="w-full">
+      {/* Masthead */}
+      <div className="bg-primary w-full py-6 px-4 text-center">
+        <Link href="/">
+          <h1 className="font-masthead text-4xl sm:text-5xl md:text-6xl text-white font-bold tracking-wide leading-tight">
+            THE WALLEYE WIRE
+          </h1>
+          <p className="font-serif italic text-white/85 text-base sm:text-lg mt-1">
+            Your source for everything Port Clinton
+          </p>
+        </Link>
       </div>
 
-      {isOpen && (
-        <div className="md:hidden border-t border-border bg-background">
-          <div className="space-y-1 px-4 pb-3 pt-2">
+      {/* Nav bar */}
+      <nav className="bg-nav w-full">
+        {/* Desktop nav */}
+        <div className="hidden md:flex items-stretch flex-wrap">
+          {links.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className={`font-mono text-xs font-medium tracking-widest uppercase px-5 py-3 transition-colors ${
+                isActive(link.href)
+                  ? "bg-primary text-white"
+                  : "text-white/80 hover:text-white hover:bg-white/10"
+              }`}
+            >
+              {link.label}
+            </Link>
+          ))}
+        </div>
+
+        {/* Mobile nav */}
+        <div className="md:hidden flex items-center justify-between px-4 py-3">
+          <span className="font-mono text-xs tracking-widest uppercase text-white/60">
+            {links.find((l) => isActive(l.href))?.label ?? "Menu"}
+          </span>
+          <button
+            onClick={() => setIsOpen(!isOpen)}
+            className="text-white p-1"
+            aria-label="Toggle menu"
+          >
+            {isOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+        </div>
+
+        {isOpen && (
+          <div className="md:hidden border-t border-white/10">
             {links.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
                 onClick={() => setIsOpen(false)}
-                className={`block px-3 py-2 rounded-md font-sans text-base font-semibold uppercase tracking-wide ${
-                  location === link.href
-                    ? "bg-primary/10 text-primary"
-                    : "text-foreground hover:bg-accent hover:text-accent-foreground"
+                className={`block font-mono text-xs tracking-widest uppercase px-5 py-3 ${
+                  isActive(link.href)
+                    ? "bg-primary text-white"
+                    : "text-white/80 hover:bg-white/10 hover:text-white"
                 }`}
               >
                 {link.label}
               </Link>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </nav>
+
+      {/* LATEST ticker bar */}
+      <Ticker />
     </header>
   );
 }

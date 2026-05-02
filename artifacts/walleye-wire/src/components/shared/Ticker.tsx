@@ -2,36 +2,39 @@ import { useGetStories, getGetStoriesQueryKey } from "@workspace/api-client-reac
 import { Link } from "wouter";
 
 export function Ticker() {
-  const { data: stories, isLoading } = useGetStories({ limit: 6 }, { query: { queryKey: getGetStoriesQueryKey({ limit: 6 }) } });
+  const { data: stories } = useGetStories({ limit: 8 }, { query: { queryKey: getGetStoriesQueryKey({ limit: 8 }) } });
 
-  if (isLoading || !stories || stories.length === 0) return null;
+  const items = stories && stories.length > 0 ? stories : null;
 
   return (
-    <div className="bg-primary text-primary-foreground border-b border-primary-foreground/20 overflow-hidden py-2 relative flex items-center ticker-container h-10">
-      <div className="absolute left-0 top-0 bottom-0 z-10 bg-primary px-4 flex items-center shadow-[4px_0_12px_rgba(192,0,26,1)] border-r border-primary-foreground/20">
-        <span className="font-sans font-bold text-xs tracking-widest uppercase">Latest News</span>
+    <div className="bg-nav w-full flex items-center h-9 overflow-hidden border-t border-white/10 ticker-container">
+      <div className="bg-primary text-white font-mono text-[10px] font-bold tracking-[0.2em] uppercase px-4 h-full flex items-center shrink-0 border-r border-white/20">
+        LATEST
       </div>
-      
-      <div className="flex whitespace-nowrap pl-32 animate-ticker">
-        {stories.map((story, i) => (
-          <div key={story.id} className="flex items-center">
-            <span className="mx-4 text-primary-foreground/40 font-mono text-xs">&bull;</span>
-            <Link 
-              href={story.is_council ? `/government` : `/community`} 
-              className="font-serif text-sm hover:underline hover:text-white transition-colors"
-            >
-              {story.headline}
-            </Link>
+
+      {items ? (
+        <div className="flex-1 overflow-hidden relative">
+          <div className="flex whitespace-nowrap animate-ticker">
+            {[...items, ...items].map((story, i) => (
+              <span key={i} className="inline-flex items-center">
+                <span className="mx-3 text-white/30 font-mono text-xs">&#8226;</span>
+                <Link
+                  href={story.is_council ? "/government" : "/community"}
+                  className="font-mono text-[11px] text-white/75 hover:text-white transition-colors"
+                >
+                  {story.headline}
+                </Link>
+              </span>
+            ))}
           </div>
-        ))}
-        {/* Duplicate for infinite effect */}
-        {stories.map((story, i) => (
-          <div key={`dup-${story.id}`} className="flex items-center">
-            <span className="mx-4 text-primary-foreground/40 font-mono text-xs">&bull;</span>
-            <span className="font-serif text-sm">{story.headline}</span>
-          </div>
-        ))}
-      </div>
+        </div>
+      ) : (
+        <div className="flex-1 px-4">
+          <span className="font-mono text-[11px] text-white/40 tracking-wide">
+            Port Clinton, Ohio &mdash; Your local news source
+          </span>
+        </div>
+      )}
     </div>
   );
 }
