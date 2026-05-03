@@ -27,6 +27,9 @@ export default function Admin() {
   const [manualText, setManualText] = useState("");
   const [manualCategory, setManualCategory] = useState("Community");
   const [manualSourceUrl, setManualSourceUrl] = useState("");
+  const [manualDate, setManualDate] = useState(() => {
+    return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  });
   const [isRunningAI, setIsRunningAI] = useState(false);
   const [isCheckingGov, setIsCheckingGov] = useState(false);
   const [isLoadingGov, setIsLoadingGov] = useState(false);
@@ -209,10 +212,12 @@ export default function Admin() {
         text: manualText,
         category: manualCategory,
         ...(manualSourceUrl.trim() && { source_url: manualSourceUrl.trim() }),
+        ...(manualDate && { story_date: manualDate }),
       });
       toast({ title: "Success", description: "Story submitted for processing" });
       setManualText("");
       setManualSourceUrl("");
+      setManualDate(new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }));
     } catch (e) {
       toast({ title: "Error", description: "Failed to submit story", variant: "destructive" });
     }
@@ -471,6 +476,15 @@ export default function Admin() {
                   <option>Feature Story</option>
                   <option>General</option>
                 </select>
+              </div>
+              <div>
+                <label className="font-sans font-bold text-xs tracking-widest uppercase mb-2 block">Story Date</label>
+                <input
+                  type="date"
+                  value={manualDate}
+                  onChange={(e) => setManualDate(e.target.value)}
+                  className="w-full border border-border bg-background p-2 font-mono text-sm rounded-none focus:outline-none focus:ring-1 focus:ring-primary"
+                />
               </div>
               <div>
                 <label className="font-sans font-bold text-xs tracking-widest uppercase mb-2 block">Source URL <span className="font-normal normal-case tracking-normal text-muted-foreground">(optional)</span></label>

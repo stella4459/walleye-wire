@@ -81,14 +81,31 @@ router.post("/stories/submit", requireAdmin, async (req, res) => {
     }
     const { text, category, source_url } = parsed.data;
 
+    // story_date comes from the admin date picker as YYYY-MM-DD — not in the Zod schema
+    const rawStoryDate = typeof req.body?.story_date === "string" ? req.body.story_date : null;
+    const storyDateFormatted = rawStoryDate
+      ? (() => {
+          try {
+            const [y, m, d] = rawStoryDate.split("-").map(Number);
+            return new Date(y, m - 1, d).toLocaleDateString("en-US", {
+              month: "long", day: "numeric", year: "numeric",
+            });
+          } catch { return null; }
+        })()
+      : null;
+
     const isFeature = category === "Feature Story";
     const isNettingRecap = category === "Netting Recap";
 
+    const dateLine = storyDateFormatted
+      ? `Use exactly this date in the story_date field: "${storyDateFormatted}".`
+      : `Use today's date (Port Clinton, Ohio) formatted as Month D YYYY for story_date.`;
+
     const system = isFeature
-      ? `You are a senior reporter for The Walleye Wire, Port Clinton Ohio. Turn the provided notes into a polished feature story about local government. Return ONLY a single JSON object: headline (compelling, specific), category ("Feature"), source_tag ("Feature"), summary (1-2 punchy sentences), body (4-6 sentences of rich narrative detail), story_date (today's date formatted as Month D YYYY), source_name ("The Walleye Wire"), is_council (false), council_votes ([]).`
+      ? `You are a senior reporter for The Walleye Wire, Port Clinton Ohio. Turn the provided notes into a polished feature story about local government. Return ONLY a single JSON object: headline (compelling, specific), category ("Feature"), source_tag ("Feature"), summary (1-2 punchy sentences), body (4-6 sentences of rich narrative detail), story_date (see date instruction), source_name ("The Walleye Wire"), is_council (false), council_votes ([]). ${dateLine}`
       : isNettingRecap
-      ? `You are a sports reporter for The Walleye Wire, Port Clinton Ohio. Turn the provided notes into a polished netting recap — a brief, lively summary of local fishing/netting activity. Return ONLY a single JSON object: headline (specific, action-oriented), category ("Government"), source_tag ("Netting Recap"), summary (1-2 punchy sentences), body (3-5 sentences), story_date (today's date formatted as Month D YYYY), source_name ("The Walleye Wire"), is_council (false), council_votes ([]).`
-      : `You are an editor for The Walleye Wire, Port Clinton Ohio. Format raw notes into a polished news story. Return ONLY a single JSON object: headline, category (Community/Government/Weather/General), source_tag (same as category), summary, body (3-5 sentences), story_date (today's date formatted as Month D YYYY), source_name ("Community Submission"), is_council (boolean), council_votes (array or []).`;
+      ? `You are a sports reporter for The Walleye Wire, Port Clinton Ohio. Turn the provided notes into a polished netting recap — a brief, lively summary of local fishing/netting activity. Return ONLY a single JSON object: headline (specific, action-oriented), category ("Government"), source_tag ("Netting Recap"), summary (1-2 punchy sentences), body (3-5 sentences), story_date (see date instruction), source_name ("The Walleye Wire"), is_council (false), council_votes ([]). ${dateLine}`
+      : `You are an editor for The Walleye Wire, Port Clinton Ohio. Format raw notes into a polished news story. Return ONLY a single JSON object: headline, category (Community/Government/Weather/General), source_tag (same as category), summary, body (3-5 sentences), story_date (see date instruction), source_name ("Community Submission"), is_council (boolean), council_votes (array or []). ${dateLine}`;
 
     const raw = await callClaude(
       [
@@ -106,19 +123,32 @@ router.post("/stories/submit", requireAdmin, async (req, res) => {
       return;
     }
 
+    // Always prefer the admin-supplied date over whatever Claude generated
+    const finalStoryDate = storyDateFormatted || String(s.story_date || "");
+
     const now = Math.floor(Date.now() / 1000);
+    // Use the admin date for created_at so stories sort correctly by date
+    const createdAt = rawStoryDate
+      ? (() => {
+          try {
+            const [y, m, d] = rawStoryDate.split("-").map(Number);
+            return Math.floor(new Date(y, m - 1, d, 12, 0, 0).getTime() / 1000);
+          } catch { return now; }
+        })()
+      : now;
+
     const result = await db.insert(storiesTable).values({
       headline: String(s.headline),
       category: isFeature ? "Feature" : isNettingRecap ? "Government" : String(s.category || category || "General"),
       source_tag: isFeature ? "Feature" : isNettingRecap ? "Netting Recap" : String(s.source_tag || s.category || "General"),
       summary: String(s.summary || ""),
       body: String(s.body || ""),
-      story_date: String(s.story_date || ""),
+      story_date: finalStoryDate,
       source_name: String(s.source_name || (isFeature ? "The Walleye Wire" : "Community Submission")),
       source_url: source_url ?? null,
       is_council: Boolean(s.is_council),
       council_votes: (s.council_votes as Array<{ motion: string; vote: string }>) || [],
-      created_at: now,
+      created_at: createdAt,
     }).returning({ id: storiesTable.id });
 
     res.json({ id: result[0]?.id });
