@@ -6,7 +6,7 @@ const require = createRequire(import.meta.url);
 const pdfParse = require("pdf-parse") as (buf: Buffer) => Promise<{ text: string; numpages: number }>;
 import { db } from "@workspace/db";
 import { storiesTable, govSummaryTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, gte } from "drizzle-orm";
 import { GetStoriesQueryParams, SubmitStoryBody } from "@workspace/api-zod";
 import { requireAdmin } from "../middlewares/admin";
 import { fetchGeneralNews, runGovMaintenanceCheck, runGovInitialLoad, regenerateGovSummary } from "../lib/news";
@@ -42,10 +42,12 @@ router.get("/stories", async (req, res) => {
     // then slice to the requested limit. This avoids the SQL LIMIT cutting out records
     // that would have matched the filter (e.g., government stories with older timestamps).
     const fetchLimit = 500;
+    const sixtyDaysAgo = Math.floor(Date.now() / 1000) - 60 * 24 * 60 * 60;
 
     let rows = await db
       .select()
       .from(storiesTable)
+      .where(gte(storiesTable.created_at, sixtyDaysAgo))
       .orderBy(desc(storiesTable.created_at))
       .limit(fetchLimit);
 

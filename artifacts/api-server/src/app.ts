@@ -31,9 +31,10 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+const isProduction = process.env.NODE_ENV === "production";
 const staticDir = path.join(process.cwd(), "artifacts/walleye-wire/dist/public");
 const indexHtml = path.join(staticDir, "index.html");
-const hasStatic = existsSync(staticDir) && existsSync(indexHtml);
+const hasStatic = isProduction && existsSync(staticDir) && existsSync(indexHtml);
 
 if (hasStatic) {
   app.use(express.static(staticDir));
