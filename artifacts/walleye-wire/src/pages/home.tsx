@@ -1,8 +1,10 @@
+import { useState, useEffect } from "react";
 import { useGetStories, getGetStoriesQueryKey, useGetWeather, getGetWeatherQueryKey } from "@workspace/api-client-react";
 import { StoryCard } from "@/components/shared/StoryCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Cloud, CloudRain, CloudLightning, Snowflake, Sun } from "lucide-react";
 import { Link } from "wouter";
+import { format } from "date-fns";
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
@@ -89,16 +91,76 @@ function WeatherWidget() {
   );
 }
 
-function StorySectionPreview({
-  category,
-  label,
-  href,
-}: {
-  category: string;
-  label: string;
-  href: string;
-}) {
-  const params = { category, limit: 1 };
+interface GovSummaryData {
+  content: string;
+  generated_at: number;
+}
+
+function GovSummaryBlock() {
+  const [summary, setSummary] = useState<GovSummaryData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/gov/summary")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { setSummary(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const generatedDate = summary?.generated_at
+    ? format(new Date(summary.generated_at * 1000), "MMM d, yyyy")
+    : null;
+
+  return (
+    <section aria-labelledby="section-government">
+      <SectionHeader>
+        <span id="section-government">Local Government</span>
+      </SectionHeader>
+
+      {loading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-5/6" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-4/6" />
+          <Skeleton className="h-4 w-5/6" />
+        </div>
+      ) : summary?.content ? (
+        <div className="border border-border bg-card p-5">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-primary mb-3">
+            60-Day Activity Digest
+          </p>
+          <p className="font-serif text-sm text-foreground leading-relaxed whitespace-pre-line">
+            {summary.content}
+          </p>
+          {generatedDate && (
+            <p className="font-mono text-[10px] text-muted-foreground mt-3">
+              Updated {generatedDate}
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="border border-border py-8 px-6 text-center bg-card">
+          <p className="font-mono text-xs text-muted-foreground tracking-wide uppercase">
+            No summary yet &mdash; check back soon.
+          </p>
+        </div>
+      )}
+
+      <div className="mt-4">
+        <Link
+          href="/government"
+          className="inline-block font-mono text-xs font-bold tracking-widest uppercase text-white bg-primary hover:bg-primary/85 px-5 py-2.5 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        >
+          View All &rarr;
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+function CommunitySectionPreview() {
+  const params = { category: "Community,General,Weather", limit: 1 };
   const { data: stories, isLoading } = useGetStories(params, {
     query: { queryKey: getGetStoriesQueryKey(params) },
   });
@@ -106,9 +168,9 @@ function StorySectionPreview({
   const story = stories?.[0];
 
   return (
-    <section aria-labelledby={`section-${href.replace("/", "")}`}>
+    <section aria-labelledby="section-community">
       <SectionHeader>
-        <span id={`section-${href.replace("/", "")}`}>{label}</span>
+        <span id="section-community">Community News</span>
       </SectionHeader>
 
       {isLoading ? (
@@ -129,7 +191,7 @@ function StorySectionPreview({
 
       <div className="mt-4">
         <Link
-          href={href}
+          href="/community"
           className="inline-block font-mono text-xs font-bold tracking-widest uppercase text-white bg-primary hover:bg-primary/85 px-5 py-2.5 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         >
           View All &rarr;
@@ -144,21 +206,13 @@ export default function Home() {
     <div className="w-full">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-12">
 
-        {/* Community News + Local Government section previews */}
+        {/* Local Government digest first, Community News second */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-          <StorySectionPreview
-            category="Community,General,Weather"
-            label="Community News"
-            href="/community"
-          />
-          <StorySectionPreview
-            category="Government"
-            label="Local Government"
-            href="/government"
-          />
+          <GovSummaryBlock />
+          <CommunitySectionPreview />
         </div>
 
-        {/* Weather — below Local Government */}
+        {/* Weather — below */}
         <div className="border-t border-border pt-10">
           <SectionHeader>Weather &middot; Port Clinton</SectionHeader>
           <div className="max-w-sm">

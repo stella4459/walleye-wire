@@ -5,11 +5,11 @@ import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 const pdfParse = require("pdf-parse") as (buf: Buffer) => Promise<{ text: string; numpages: number }>;
 import { db } from "@workspace/db";
-import { storiesTable } from "@workspace/db";
+import { storiesTable, govSummaryTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { GetStoriesQueryParams, SubmitStoryBody } from "@workspace/api-zod";
 import { requireAdmin } from "../middlewares/admin";
-import { fetchGeneralNews, runGovMaintenanceCheck, runGovInitialLoad } from "../lib/news";
+import { fetchGeneralNews, runGovMaintenanceCheck, runGovInitialLoad, regenerateGovSummary } from "../lib/news";
 import { callClaude, callClaudeWithDocs, parseObj } from "../lib/claude";
 import { logger } from "../lib/logger";
 
@@ -81,7 +81,11 @@ router.post("/stories/submit", requireAdmin, async (req, res) => {
     }
     const { text, category } = parsed.data;
 
-    const system = `You are an editor for The Walleye Wire, Port Clinton Ohio. Format raw notes into a polished news story. Return ONLY a single JSON object: headline, category (Community/Local Government/Weather/General), source_tag (same), summary, body (3-5 sentences), story_date (today's date formatted as Month D YYYY), source_name ("Community Submission"), is_council (boolean), council_votes (array or []).`;
+    const isFeature = category === "Feature Story";
+
+    const system = isFeature
+      ? `You are a senior reporter for The Walleye Wire, Port Clinton Ohio. Turn the provided notes into a polished feature story about local government. Return ONLY a single JSON object: headline (compelling, specific), category ("Feature"), source_tag ("Feature"), summary (1-2 punchy sentences), body (4-6 sentences of rich narrative detail), story_date (today's date formatted as Month D YYYY), source_name ("The Walleye Wire"), is_council (false), council_votes ([]).`
+      : `You are an editor for The Walleye Wire, Port Clinton Ohio. Format raw notes into a polished news story. Return ONLY a single JSON object: headline, category (Community/Government/Weather/General), source_tag (same as category), summary, body (3-5 sentences), story_date (today's date formatted as Month D YYYY), source_name ("Community Submission"), is_council (boolean), council_votes (array or []).`;
 
     const raw = await callClaude(
       [
@@ -102,12 +106,12 @@ router.post("/stories/submit", requireAdmin, async (req, res) => {
     const now = Math.floor(Date.now() / 1000);
     const result = await db.insert(storiesTable).values({
       headline: String(s.headline),
-      category: String(s.category || category || "General"),
-      source_tag: String(s.source_tag || s.category || "General"),
+      category: isFeature ? "Feature" : String(s.category || category || "General"),
+      source_tag: isFeature ? "Feature" : String(s.source_tag || s.category || "General"),
       summary: String(s.summary || ""),
       body: String(s.body || ""),
       story_date: String(s.story_date || ""),
-      source_name: String(s.source_name || "Community Submission"),
+      source_name: String(s.source_name || (isFeature ? "The Walleye Wire" : "Community Submission")),
       is_council: Boolean(s.is_council),
       council_votes: (s.council_votes as Array<{ motion: string; vote: string }>) || [],
       created_at: now,
@@ -149,6 +153,33 @@ router.post("/gov/backfill", requireAdmin, async (req, res) => {
   } catch (e) {
     req.log.error({ err: e }, "Error running gov initial load");
     res.status(500).json({ error: "Failed to run initial load" });
+  }
+});
+
+// Get cached 60-day gov summary
+router.get("/gov/summary", async (req, res) => {
+  try {
+    const rows = await db.select().from(govSummaryTable).limit(1);
+    if (!rows.length) {
+      res.status(404).json({ error: "No summary yet" });
+      return;
+    }
+    res.json(rows[0]);
+  } catch (e) {
+    req.log.error({ err: e }, "Error fetching gov summary");
+    res.status(500).json({ error: "Failed to fetch summary" });
+  }
+});
+
+// Trigger a fresh 60-day summary regeneration
+router.post("/gov/summary/regenerate", requireAdmin, async (req, res) => {
+  try {
+    await regenerateGovSummary();
+    const rows = await db.select().from(govSummaryTable).limit(1);
+    res.json(rows[0] ?? { ok: true });
+  } catch (e) {
+    req.log.error({ err: e }, "Error regenerating gov summary");
+    res.status(500).json({ error: "Failed to regenerate summary" });
   }
 });
 

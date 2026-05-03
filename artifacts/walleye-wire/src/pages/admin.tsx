@@ -30,6 +30,7 @@ export default function Admin() {
   const [isCheckingGov, setIsCheckingGov] = useState(false);
   const [isLoadingGov, setIsLoadingGov] = useState(false);
   const [isResettingGov, setIsResettingGov] = useState(false);
+  const [isRegeneratingSum, setIsRegeneratingSum] = useState(false);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
   const pdfInputRef = useRef<HTMLInputElement>(null);
@@ -140,6 +141,18 @@ export default function Admin() {
       toast({ title: "Error", description: "Failed to run initial load", variant: "destructive" });
     } finally {
       setIsLoadingGov(false);
+    }
+  };
+
+  const onRegenerateSum = async () => {
+    setIsRegeneratingSum(true);
+    try {
+      await adminFetch("/api/gov/summary/regenerate", "POST");
+      toast({ title: "Summary Updated", description: "60-day gov digest has been regenerated." });
+    } catch (e) {
+      toast({ title: "Error", description: "Failed to regenerate summary", variant: "destructive" });
+    } finally {
+      setIsRegeneratingSum(false);
     }
   };
 
@@ -382,8 +395,17 @@ export default function Admin() {
                   <Trash2 size={14} className={`mr-2 ${isResettingGov ? "animate-spin" : ""}`} />
                   {isResettingGov ? "Resetting…" : "Reset & Reload from Sheet"}
                 </Button>
+                <Button
+                  onClick={onRegenerateSum}
+                  disabled={isCheckingGov || isLoadingGov || isResettingGov || isRegeneratingSum}
+                  variant="outline"
+                  className="w-full justify-start rounded-none font-mono text-xs uppercase tracking-widest"
+                >
+                  <Sparkles size={14} className={`mr-2 ${isRegeneratingSum ? "animate-spin" : ""}`} />
+                  {isRegeneratingSum ? "Regenerating…" : "Regenerate Homepage Digest"}
+                </Button>
                 <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">
-                  "Check for New" scans the sheet and stops at the first known doc. "Initial Load" imports every row — skip already-imported ones. "Reset & Reload" deletes all gov docs and re-imports fresh from the sheet.
+                  "Check for New" scans the sheet and stops at the first known doc. "Initial Load" imports every row — skip already-imported ones. "Reset & Reload" deletes all gov docs and re-imports fresh. "Regenerate Homepage Digest" re-runs the 60-day summary shown on the homepage.
                 </p>
               </div>
             </div>
@@ -439,6 +461,7 @@ export default function Admin() {
                 >
                   <option>Community</option>
                   <option>Government</option>
+                  <option>Feature Story</option>
                   <option>General</option>
                 </select>
               </div>

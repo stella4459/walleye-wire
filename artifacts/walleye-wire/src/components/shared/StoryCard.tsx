@@ -34,7 +34,15 @@ export function StoryCard({ story, index = 0 }: StoryCardProps) {
       <div className="p-6 flex-grow flex flex-col">
         <div className="flex justify-between items-start mb-3 gap-4">
           <div className="flex flex-wrap gap-2">
-            {story.source_tag && (
+            {story.category === "Feature" && (
+              <Badge
+                variant="outline"
+                className="bg-amber-50 text-amber-800 border-amber-400 font-mono text-[10px] tracking-wide rounded-none font-bold"
+              >
+                FEATURE
+              </Badge>
+            )}
+            {story.source_tag && story.source_tag !== "Feature" && (
               <Badge
                 variant="outline"
                 className={

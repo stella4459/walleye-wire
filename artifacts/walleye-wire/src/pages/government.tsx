@@ -4,15 +4,24 @@ import { StoryCard } from "@/components/shared/StoryCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 
-const SOURCES = ["All", "Ordinance", "Resolution"];
+type FilterOption = "All" | "Ordinance" | "Resolution" | "Feature Story";
+
+const FILTER_OPTIONS: FilterOption[] = ["All", "Ordinance", "Resolution", "Feature Story"];
+
+function getQueryParams(filter: FilterOption) {
+  if (filter === "Feature Story") {
+    return { category: "Feature" };
+  }
+  if (filter === "All") {
+    return { category: "Government,Feature" };
+  }
+  return { category: "Government", source_tag: filter };
+}
 
 export default function Government() {
-  const [filter, setFilter] = useState<string>("All");
+  const [filter, setFilter] = useState<FilterOption>("All");
 
-  const queryParams = {
-    category: "Government",
-    ...(filter !== "All" && { source_tag: filter }),
-  };
+  const queryParams = getQueryParams(filter);
 
   const { data: stories, isLoading } = useGetStories(queryParams, {
     query: { queryKey: getGetStoriesQueryKey(queryParams) },
@@ -25,20 +34,24 @@ export default function Government() {
           Local Government
         </h1>
         <p className="font-serif text-lg text-muted-foreground mt-4">
-          Ordinances and resolutions from Port Clinton City Hall, summarized in plain English. Click "View source" on any item to read the original document.
+          Ordinances, resolutions, and feature coverage from Port Clinton City Hall — summarized in plain English. Click "View source" on any item to read the original document.
         </p>
       </header>
 
       <div className="flex flex-wrap gap-2 mb-8">
-        {SOURCES.map((source) => (
+        {FILTER_OPTIONS.map((option) => (
           <Button
-            key={source}
-            variant={filter === source ? "default" : "outline"}
+            key={option}
+            variant={filter === option ? "default" : "outline"}
             size="sm"
-            onClick={() => setFilter(source)}
-            className="rounded-none font-mono tracking-wide text-xs uppercase"
+            onClick={() => setFilter(option)}
+            className={`rounded-none font-mono tracking-wide text-xs uppercase ${
+              option === "Feature Story" && filter !== option
+                ? "border-amber-600/50 text-amber-700 hover:bg-amber-50"
+                : ""
+            }`}
           >
-            {source}
+            {option}
           </Button>
         ))}
       </div>
@@ -62,7 +75,9 @@ export default function Government() {
       ) : (
         <div className="text-center py-20 bg-muted/30 border border-border rounded-sm">
           <p className="font-serif text-lg text-muted-foreground">
-            No documents found. Use "Initial Load" in the admin panel to import all ordinances and resolutions from the Google Sheet.
+            {filter === "Feature Story"
+              ? "No feature stories yet. Add one from the admin panel."
+              : "No documents found. Use \"Initial Load\" in the admin panel to import ordinances and resolutions from the Google Sheet."}
           </p>
         </div>
       )}

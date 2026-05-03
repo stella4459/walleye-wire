@@ -2,8 +2,8 @@ import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 const pdfParse = require("pdf-parse") as (buf: Buffer) => Promise<{ text: string; numpages: number }>;
 import { db } from "@workspace/db";
-import { storiesTable, seenDocsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { storiesTable, seenDocsTable, govSummaryTable } from "@workspace/db";
+import { eq, gte } from "drizzle-orm";
 import { callClaude, parseArr, parseObj } from "./claude";
 import { logger } from "./logger";
 
@@ -431,6 +431,11 @@ export async function runGovInitialLoad(): Promise<{ added: number; skipped: num
   }
 
   logger.info(`[Gov] Initial load complete: added=${added} skipped=${skipped} errors=${errors}`);
+  if (added > 0) {
+    await regenerateGovSummary().catch((e) =>
+      logger.error({ err: e }, "[Gov] Failed to regenerate summary after initial load")
+    );
+  }
   return { added, skipped, errors };
 }
 
@@ -475,5 +480,70 @@ export async function runGovMaintenanceCheck(): Promise<{ added: number; stopped
   }
 
   logger.info(`[Gov] Maintenance done: added=${added} stopped=${stopped} errors=${errors}`);
+  if (added > 0) {
+    await regenerateGovSummary().catch((e) =>
+      logger.error({ err: e }, "[Gov] Failed to regenerate summary after maintenance check")
+    );
+  }
   return { added, stopped, errors };
+}
+
+// ---------------------------------------------------------------------------
+// GOV SUMMARY — 60-day Claude digest
+// ---------------------------------------------------------------------------
+
+const GOV_SUMMARY_SYSTEM = `You are a local government reporter for The Walleye Wire, Port Clinton Ohio's community news site.
+Write a plain-English digest of recent Port Clinton government activity for everyday residents.
+Rules:
+- 2–3 concise paragraphs. No bullet points, no headings.
+- Use neutral, descriptive language. Do NOT say documents were "passed," "approved," or "enacted."
+  Use phrasing like: "proposes," "would," "concerns," "addresses," "calls for," "aims to."
+- Cover the most significant or interesting items first.
+- If there is only one item, one solid paragraph is fine.
+- Write in third person. Do not mention "The Walleye Wire" in the body.
+Return ONLY the plain text digest — no JSON, no markdown.`;
+
+export async function regenerateGovSummary(): Promise<void> {
+  const sixtyDaysAgo = Math.floor(Date.now() / 1000) - 60 * 24 * 60 * 60;
+
+  const recent = await db
+    .select({
+      headline: storiesTable.headline,
+      summary: storiesTable.summary,
+      source_tag: storiesTable.source_tag,
+      story_date: storiesTable.story_date,
+    })
+    .from(storiesTable)
+    .where(
+      gte(storiesTable.created_at, sixtyDaysAgo)
+    );
+
+  const govDocs = recent.filter(
+    (r) => (r.source_tag ?? "").toLowerCase() === "ordinance" ||
+            (r.source_tag ?? "").toLowerCase() === "resolution"
+  );
+
+  if (govDocs.length === 0) {
+    logger.info("[Gov] No recent docs for summary generation, skipping.");
+    return;
+  }
+
+  const docList = govDocs
+    .map((d) => `• ${d.source_tag ?? ""} — ${d.headline}: ${d.summary ?? ""}`)
+    .join("\n");
+
+  const prompt = `The following ordinances and resolutions have come before Port Clinton City Council in the past 60 days:\n\n${docList}\n\nWrite the digest as instructed.`;
+
+  const content = await callClaude([{ role: "user", content: prompt }], GOV_SUMMARY_SYSTEM);
+  const nowTs = Math.floor(Date.now() / 1000);
+
+  await db
+    .insert(govSummaryTable)
+    .values({ id: 1, content: content.trim(), generated_at: nowTs })
+    .onConflictDoUpdate({
+      target: govSummaryTable.id,
+      set: { content: content.trim(), generated_at: nowTs },
+    });
+
+  logger.info(`[Gov] Summary regenerated (${govDocs.length} docs, ${content.length} chars)`);
 }
