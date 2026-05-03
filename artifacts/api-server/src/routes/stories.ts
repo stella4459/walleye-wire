@@ -17,6 +17,21 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 
 
 const router = Router();
 
+router.get("/stories/by-slug/:slug", async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const rows = await db.select().from(storiesTable).where(eq(storiesTable.slug, slug)).limit(1);
+    if (!rows.length) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    res.json(rows[0]);
+  } catch (e) {
+    req.log.error({ err: e }, "Error fetching story by slug");
+    res.status(500).json({ error: "Failed to fetch story" });
+  }
+});
+
 router.get("/stories", async (req, res) => {
   try {
     const parsed = GetStoriesQueryParams.safeParse(req.query);
@@ -214,6 +229,29 @@ router.post("/gov/summary/regenerate", requireAdmin, async (req, res) => {
   } catch (e) {
     req.log.error({ err: e }, "Error regenerating gov summary");
     res.status(500).json({ error: "Failed to regenerate summary" });
+  }
+});
+
+// Backfill slugs for existing gov docs using the Google Sheet
+router.post("/gov/backfill-slugs", requireAdmin, async (req, res) => {
+  try {
+    const { fetchSheetDocsPublic } = await import("../lib/news");
+    const docs = await fetchSheetDocsPublic();
+    let updated = 0;
+    for (const doc of docs) {
+      if (!doc.url || !doc.type || !doc.number) continue;
+      const slug = `${doc.type.toLowerCase()}-${doc.number.replace(/[^a-z0-9]+/gi, "-").toLowerCase().replace(/(^-|-$)/g, "")}`;
+      const result = await db
+        .update(storiesTable)
+        .set({ slug })
+        .where(eq(storiesTable.source_url, doc.url))
+        .returning({ id: storiesTable.id });
+      if (result.length) updated++;
+    }
+    res.json({ updated });
+  } catch (e) {
+    req.log.error({ err: e }, "Error backfilling slugs");
+    res.status(500).json({ error: "Failed to backfill slugs" });
   }
 });
 

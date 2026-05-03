@@ -220,6 +220,9 @@ interface SheetDoc {
   date: string; // e.g. "April 28, 2026"
 }
 
+/** Public alias used by the slug backfill route. */
+export { fetchSheetDocs as fetchSheetDocsPublic };
+
 /** Parse the Google Sheet CSV and return rows newest-first (as listed in the sheet). */
 async function fetchSheetDocs(): Promise<SheetDoc[]> {
   const res = await fetch(SHEET_CSV_URL, { signal: AbortSignal.timeout(15000) });
@@ -362,6 +365,8 @@ Write a plain-English summary as described in your instructions.`;
       rawTitle ||
       `${doc.type} ${doc.number}${doc.date ? ` — ${doc.date}` : ""}`;
 
+    const govSlug = `${doc.type.toLowerCase()}-${(doc.number || "").replace(/[^a-z0-9]+/gi, "-").toLowerCase().replace(/(^-|-$)/g, "")}`;
+
     await db.insert(storiesTable).values({
       headline: headline.slice(0, 300),
       category: "Government",
@@ -371,6 +376,7 @@ Write a plain-English summary as described in your instructions.`;
       story_date: publishDate,
       source_name: "Port Clinton City Council",
       source_url: doc.url,
+      slug: govSlug || null,
       is_council: true,
       council_votes: [],
       created_at: createdAtTs,

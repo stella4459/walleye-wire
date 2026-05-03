@@ -35,6 +35,7 @@ export const GetStoriesResponseItem = zod.object({
   story_date: zod.string().optional(),
   source_name: zod.string().optional(),
   source_url: zod.string().optional(),
+  slug: zod.string().optional(),
   is_council: zod.boolean().optional(),
   council_votes: zod
     .array(
@@ -47,6 +48,36 @@ export const GetStoriesResponseItem = zod.object({
   created_at: zod.number().optional(),
 });
 export const GetStoriesResponse = zod.array(GetStoriesResponseItem);
+
+/**
+ * @summary Get a single story by its slug
+ */
+export const GetStoryBySlugParams = zod.object({
+  slug: zod.coerce.string(),
+});
+
+export const GetStoryBySlugResponse = zod.object({
+  id: zod.number(),
+  headline: zod.string(),
+  category: zod.string(),
+  source_tag: zod.string().optional(),
+  summary: zod.string().optional(),
+  body: zod.string().optional(),
+  story_date: zod.string().optional(),
+  source_name: zod.string().optional(),
+  source_url: zod.string().optional(),
+  slug: zod.string().optional(),
+  is_council: zod.boolean().optional(),
+  council_votes: zod
+    .array(
+      zod.object({
+        motion: zod.string(),
+        vote: zod.string(),
+      }),
+    )
+    .optional(),
+  created_at: zod.number().optional(),
+});
 
 /**
  * @summary Delete a story (admin)

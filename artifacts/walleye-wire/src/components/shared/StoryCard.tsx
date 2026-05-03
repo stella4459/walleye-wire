@@ -1,7 +1,8 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { format } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, ChevronUp, ExternalLink, Calendar as CalendarIcon, Tag } from "lucide-react";
+import { ChevronDown, ChevronUp, ExternalLink, Calendar as CalendarIcon, Share2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Story } from "@workspace/api-client-react";
 
@@ -74,7 +75,7 @@ export function StoryCard({ story, index = 0 }: StoryCardProps) {
         )}
 
         <div className="mt-auto pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-border/50">
-          <div className="flex items-center gap-2 text-xs font-sans text-muted-foreground">
+          <div className="flex items-center gap-2 text-xs font-sans text-muted-foreground flex-wrap">
             {story.source_name && (
               <span className="font-semibold uppercase tracking-wider text-foreground/80">{story.source_name}</span>
             )}
@@ -89,6 +90,18 @@ export function StoryCard({ story, index = 0 }: StoryCardProps) {
                 >
                   View source <ExternalLink size={10} />
                 </a>
+              </>
+            )}
+            {story.slug && (
+              <>
+                <span className="opacity-50">•</span>
+                <Link
+                  href={`/government/${story.slug}`}
+                  className="hover:text-primary inline-flex items-center gap-1 transition-colors"
+                  aria-label={`Share ${story.headline}`}
+                >
+                  Share <Share2 size={10} />
+                </Link>
               </>
             )}
           </div>

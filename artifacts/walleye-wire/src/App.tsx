@@ -7,6 +7,7 @@ import { Layout } from "@/components/layout/Layout";
 import Home from "@/pages/home";
 import Community from "@/pages/community";
 import Government from "@/pages/government";
+import GovDoc from "@/pages/gov-doc";
 import Calendar from "@/pages/calendar";
 import Weather from "@/pages/weather";
 import Admin from "@/pages/admin";
@@ -21,6 +22,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/community" component={Community} />
       <Route path="/government" component={Government} />
+      <Route path="/government/:slug" component={GovDoc} />
       <Route path="/calendar" component={Calendar} />
       <Route path="/weather" component={Weather} />
       <Route path="/admin" component={Admin} />

@@ -213,6 +213,93 @@ export function useGetStories<
 }
 
 /**
+ * @summary Get a single story by its slug
+ */
+export const getGetStoryBySlugUrl = (slug: string) => {
+  return `/api/stories/by-slug/${slug}`;
+};
+
+export const getStoryBySlug = async (
+  slug: string,
+  options?: RequestInit,
+): Promise<Story> => {
+  return customFetch<Story>(getGetStoryBySlugUrl(slug), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetStoryBySlugQueryKey = (slug: string) => {
+  return [`/api/stories/by-slug/${slug}`] as const;
+};
+
+export const getGetStoryBySlugQueryOptions = <
+  TData = Awaited<ReturnType<typeof getStoryBySlug>>,
+  TError = ErrorType<void>,
+>(
+  slug: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getStoryBySlug>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetStoryBySlugQueryKey(slug);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getStoryBySlug>>> = ({
+    signal,
+  }) => getStoryBySlug(slug, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!slug,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getStoryBySlug>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetStoryBySlugQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getStoryBySlug>>
+>;
+export type GetStoryBySlugQueryError = ErrorType<void>;
+
+/**
+ * @summary Get a single story by its slug
+ */
+
+export function useGetStoryBySlug<
+  TData = Awaited<ReturnType<typeof getStoryBySlug>>,
+  TError = ErrorType<void>,
+>(
+  slug: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getStoryBySlug>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetStoryBySlugQueryOptions(slug, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * @summary Delete a story (admin)
  */
 export const getDeleteStoryUrl = (id: number) => {

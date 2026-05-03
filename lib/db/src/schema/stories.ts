@@ -12,6 +12,7 @@ export const storiesTable = pgTable("stories", {
   story_date: text("story_date"),
   source_name: text("source_name"),
   source_url: text("source_url"),
+  slug: text("slug"),
   is_council: boolean("is_council").default(false),
   council_votes: json("council_votes").$type<Array<{ motion: string; vote: string }>>().default([]),
   created_at: integer("created_at").default(0),

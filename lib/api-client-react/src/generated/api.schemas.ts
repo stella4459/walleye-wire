@@ -49,6 +49,7 @@ export interface Story {
   story_date?: string;
   source_name?: string;
   source_url?: string;
+  slug?: string;
   is_council?: boolean;
   council_votes?: CouncilVote[];
   created_at?: number;

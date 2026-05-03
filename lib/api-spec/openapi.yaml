@@ -64,6 +64,27 @@ paths:
                 items:
                   $ref: "#/components/schemas/Story"
 
+  /stories/by-slug/{slug}:
+    get:
+      operationId: getStoryBySlug
+      tags: [stories]
+      summary: Get a single story by its slug
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Story
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Story"
+        "404":
+          description: Not found
+
   /stories/{id}:
     delete:
       operationId: deleteStory
@@ -331,6 +352,8 @@ components:
         source_name:
           type: string
         source_url:
+          type: string
+        slug:
           type: string
         is_council:
           type: boolean
