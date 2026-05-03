@@ -102,9 +102,9 @@ router.post("/stories/submit", requireAdmin, async (req, res) => {
       const srcUrl = typeof req.body?.source_url === "string" && req.body.source_url.trim() ? req.body.source_url.trim() : null;
 
       const isFeature = cat === "Feature Story";
-      const isNettingRecap = cat === "Netting Recap";
-      const finalCategory = isFeature ? "Feature" : isNettingRecap ? "Government" : cat;
-      const finalSourceTag = isFeature ? "Feature" : isNettingRecap ? "Netting Recap" : cat;
+      const isMeetingRecap = cat === "Meeting Recap";
+      const finalCategory = isFeature ? "Feature" : isMeetingRecap ? "Government" : cat;
+      const finalSourceTag = isFeature ? "Feature" : isMeetingRecap ? "Meeting Recap" : cat;
 
       const rawDate = typeof req.body?.story_date === "string" ? req.body.story_date : null;
       const now = Math.floor(Date.now() / 1000);
@@ -162,7 +162,7 @@ router.post("/stories/submit", requireAdmin, async (req, res) => {
       : null;
 
     const isFeature = category === "Feature Story";
-    const isNettingRecap = category === "Netting Recap";
+    const isMeetingRecap = category === "Meeting Recap";
 
     const dateLine = storyDateFormatted
       ? `Use exactly this date in the story_date field: "${storyDateFormatted}".`
@@ -170,8 +170,8 @@ router.post("/stories/submit", requireAdmin, async (req, res) => {
 
     const system = isFeature
       ? `You are a senior reporter for The Walleye Wire, Port Clinton Ohio. Turn the provided notes into a polished feature story about local government. Return ONLY a single JSON object: headline (compelling, specific), category ("Feature"), source_tag ("Feature"), summary (1-2 punchy sentences), body (4-6 sentences of rich narrative detail), story_date (see date instruction), source_name ("The Walleye Wire"), is_council (false), council_votes ([]). ${dateLine}`
-      : isNettingRecap
-      ? `You are a sports reporter for The Walleye Wire, Port Clinton Ohio. Turn the provided notes into a polished netting recap — a brief, lively summary of local fishing/netting activity. Return ONLY a single JSON object: headline (specific, action-oriented), category ("Government"), source_tag ("Netting Recap"), summary (1-2 punchy sentences), body (3-5 sentences), story_date (see date instruction), source_name ("The Walleye Wire"), is_council (false), council_votes ([]). ${dateLine}`
+      : isMeetingRecap
+      ? `You are a reporter for The Walleye Wire, Port Clinton Ohio. Turn the provided notes into a polished city council meeting recap — a clear, readable summary of what was discussed and decided. Return ONLY a single JSON object: headline (specific, action-oriented), category ("Government"), source_tag ("Meeting Recap"), summary (1-2 punchy sentences), body (3-5 sentences), story_date (see date instruction), source_name ("The Walleye Wire"), is_council (true), council_votes ([]). ${dateLine}`
       : `You are an editor for The Walleye Wire, Port Clinton Ohio. Format raw notes into a polished news story. Return ONLY a single JSON object: headline, category (Community/Government/Weather/General), source_tag (same as category), summary, body (3-5 sentences), story_date (see date instruction), source_name ("Community Submission"), is_council (boolean), council_votes (array or []). ${dateLine}`;
 
     const raw = await callClaude(
@@ -206,8 +206,8 @@ router.post("/stories/submit", requireAdmin, async (req, res) => {
 
     const result = await db.insert(storiesTable).values({
       headline: String(s.headline),
-      category: isFeature ? "Feature" : isNettingRecap ? "Government" : String(s.category || category || "General"),
-      source_tag: isFeature ? "Feature" : isNettingRecap ? "Netting Recap" : String(s.source_tag || s.category || "General"),
+      category: isFeature ? "Feature" : isMeetingRecap ? "Government" : String(s.category || category || "General"),
+      source_tag: isFeature ? "Feature" : isMeetingRecap ? "Meeting Recap" : String(s.source_tag || s.category || "General"),
       summary: String(s.summary || ""),
       body: String(s.body || ""),
       story_date: finalStoryDate,

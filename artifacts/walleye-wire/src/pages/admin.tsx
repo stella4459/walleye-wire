@@ -514,7 +514,7 @@ export default function Admin() {
                   >
                     <option>Community</option>
                     <option>Government</option>
-                    <option>Netting Recap</option>
+                    <option>Meeting Recap</option>
                     <option>Feature Story</option>
                     <option>General</option>
                   </select>

@@ -6,14 +6,14 @@ import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
-type FilterOption = "All" | "Ordinance" | "Resolution" | "Netting Recap" | "Feature Story";
+type FilterOption = "All" | "Ordinance" | "Resolution" | "Meeting Recap" | "Feature Story";
 
-const FILTER_OPTIONS: FilterOption[] = ["All", "Ordinance", "Resolution", "Netting Recap", "Feature Story"];
+const FILTER_OPTIONS: FilterOption[] = ["All", "Ordinance", "Resolution", "Meeting Recap", "Feature Story"];
 
 function getQueryParams(filter: FilterOption) {
   if (filter === "Feature Story") return { category: "Feature" };
   if (filter === "All") return { category: "Government,Feature" };
-  return { category: "Government", source_tag: filter };
+  return { category: "Government,Feature", source_tag: filter };
 }
 
 interface GovSummaryData {

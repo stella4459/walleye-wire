@@ -7,8 +7,9 @@ export function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
 
   const links = [
-    { href: "/community", label: "Community News" },
+    { href: "/", label: "Home" },
     { href: "/government", label: "Local Government" },
+    { href: "/community", label: "Community News" },
     { href: "/calendar", label: "Calendar" },
     { href: "/weather", label: "Weather" },
   ];
