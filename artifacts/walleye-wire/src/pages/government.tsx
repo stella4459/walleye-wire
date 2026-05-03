@@ -1,21 +1,102 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useGetStories, getGetStoriesQueryKey } from "@workspace/api-client-react";
 import { StoryCard } from "@/components/shared/StoryCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { format } from "date-fns";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
 type FilterOption = "All" | "Ordinance" | "Resolution" | "Netting Recap" | "Feature Story";
 
 const FILTER_OPTIONS: FilterOption[] = ["All", "Ordinance", "Resolution", "Netting Recap", "Feature Story"];
 
 function getQueryParams(filter: FilterOption) {
-  if (filter === "Feature Story") {
-    return { category: "Feature" };
-  }
-  if (filter === "All") {
-    return { category: "Government,Feature" };
-  }
+  if (filter === "Feature Story") return { category: "Feature" };
+  if (filter === "All") return { category: "Government,Feature" };
   return { category: "Government", source_tag: filter };
+}
+
+interface GovSummaryData {
+  content: string;
+  generated_at: number;
+}
+
+function GovDigest() {
+  const [summary, setSummary] = useState<GovSummaryData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/gov/summary")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { setSummary(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="mb-10 border border-border bg-card p-5 space-y-2">
+        <Skeleton className="h-3 w-40 mb-3" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-5/6" />
+        <Skeleton className="h-4 w-4/6" />
+      </div>
+    );
+  }
+
+  if (!summary?.content) return null;
+
+  // Split into paragraphs — show only first, expand for rest
+  const paragraphs = summary.content.split(/\n\n+/).filter(Boolean);
+  const firstPara = paragraphs[0] ?? "";
+  const restParas = paragraphs.slice(1);
+  const hasMore = restParas.length > 0;
+
+  const generatedDate = summary.generated_at
+    ? format(new Date(summary.generated_at * 1000), "MMM d, yyyy")
+    : null;
+
+  return (
+    <div className="mb-10 border border-border bg-card p-5">
+      <p className="font-mono text-[10px] uppercase tracking-widest text-primary mb-3">
+        60-Day Activity Digest
+      </p>
+
+      <p className="font-serif text-sm text-foreground leading-relaxed">
+        {firstPara}
+      </p>
+
+      {hasMore && expanded && (
+        <div className="mt-3 space-y-3">
+          {restParas.map((para, i) => (
+            <p key={i} className="font-serif text-sm text-foreground leading-relaxed">
+              {para}
+            </p>
+          ))}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between mt-4 pt-3 border-t border-border/50">
+        {generatedDate && (
+          <span className="font-mono text-[10px] text-muted-foreground">
+            Updated {generatedDate}
+          </span>
+        )}
+        {hasMore && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="flex items-center gap-1 font-mono text-[11px] font-bold tracking-widest uppercase text-primary hover:text-primary/80 transition-colors ml-auto"
+          >
+            {expanded ? (
+              <><ChevronUp size={13} /> Read less</>
+            ) : (
+              <><ChevronDown size={13} /> Read more</>
+            )}
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default function Government() {
@@ -37,6 +118,8 @@ export default function Government() {
           Ordinances, resolutions, and feature coverage from Port Clinton City Hall — summarized in plain English. Click "View source" on any item to read the original document.
         </p>
       </header>
+
+      <GovDigest />
 
       <div className="flex flex-wrap gap-2 mb-8">
         {FILTER_OPTIONS.map((option) => (

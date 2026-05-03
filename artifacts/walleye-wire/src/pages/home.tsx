@@ -1,19 +1,27 @@
-import { useState, useEffect } from "react";
 import { useGetStories, getGetStoriesQueryKey, useGetWeather, getGetWeatherQueryKey } from "@workspace/api-client-react";
 import { StoryCard } from "@/components/shared/StoryCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Cloud, CloudRain, CloudLightning, Snowflake, Sun } from "lucide-react";
 import { Link } from "wouter";
-import { format } from "date-fns";
 
-function SectionHeader({ children }: { children: React.ReactNode }) {
+function SectionHeader({ children, href }: { children: React.ReactNode; href?: string }) {
   return (
-    <div className="mb-5">
-      <h2 className="font-mono text-xs font-bold tracking-[0.2em] uppercase text-primary">
-        {children}
-      </h2>
-      <div className="h-[2px] bg-primary mt-1.5" />
-      <div className="h-px bg-primary/25 mt-0.5" />
+    <div className="mb-5 flex items-end justify-between gap-4">
+      <div className="flex-1">
+        <h2 className="font-mono text-xs font-bold tracking-[0.2em] uppercase text-primary">
+          {children}
+        </h2>
+        <div className="h-[2px] bg-primary mt-1.5" />
+        <div className="h-px bg-primary/25 mt-0.5" />
+      </div>
+      {href && (
+        <Link
+          href={href}
+          className="font-mono text-[11px] font-bold tracking-widest uppercase text-white bg-primary hover:bg-primary/85 px-4 py-2 transition-colors shrink-0"
+        >
+          View All &rarr;
+        </Link>
+      )}
     </div>
   );
 }
@@ -46,19 +54,11 @@ function WeatherWidget() {
   const { data: weather, isLoading } = useGetWeather({ query: { queryKey: getGetWeatherQueryKey() } });
 
   if (isLoading) {
-    return (
-      <div className="bg-nav text-white font-mono text-sm p-5">
-        Loading weather...
-      </div>
-    );
+    return <div className="bg-nav text-white font-mono text-sm p-5">Loading weather...</div>;
   }
 
   if (!weather?.current) {
-    return (
-      <div className="bg-nav text-white font-mono text-sm p-5">
-        Weather unavailable.
-      </div>
-    );
+    return <div className="bg-nav text-white font-mono text-sm p-5">Weather unavailable.</div>;
   }
 
   const label = getWeatherLabel(weather.current.weathercode);
@@ -73,9 +73,7 @@ function WeatherWidget() {
         <div>
           <div className="text-5xl font-bold leading-none">{temp}&deg;</div>
           <div className="mt-2 text-sm text-white/80 uppercase tracking-wider">{label}</div>
-          <div className="mt-1 text-xs text-white/70">
-            H: {high}&deg; &nbsp; L: {low}&deg;
-          </div>
+          <div className="mt-1 text-xs text-white/70">H: {high}&deg; &nbsp; L: {low}&deg;</div>
           <div className="mt-1 text-xs text-white/70">
             Wind: {weather.current.windspeed_10m} mph &nbsp;&bull;&nbsp; Humidity: {weather.current.relativehumidity_2m}%
           </div>
@@ -91,96 +89,44 @@ function WeatherWidget() {
   );
 }
 
-interface GovSummaryData {
-  content: string;
-  generated_at: number;
-}
-
-function GovSummaryBlock() {
-  const [summary, setSummary] = useState<GovSummaryData | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/gov/summary")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => { setSummary(data); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, []);
-
-  const generatedDate = summary?.generated_at
-    ? format(new Date(summary.generated_at * 1000), "MMM d, yyyy")
-    : null;
-
-  return (
-    <section aria-labelledby="section-government">
-      <SectionHeader>
-        <span id="section-government">Local Government</span>
-      </SectionHeader>
-
-      {loading ? (
-        <div className="space-y-2">
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-5/6" />
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-4/6" />
-          <Skeleton className="h-4 w-5/6" />
-        </div>
-      ) : summary?.content ? (
-        <div className="border border-border bg-card p-5">
-          <p className="font-mono text-[10px] uppercase tracking-widest text-primary mb-3">
-            60-Day Activity Digest
-          </p>
-          <p className="font-serif text-sm text-foreground leading-relaxed whitespace-pre-line">
-            {summary.content}
-          </p>
-          {generatedDate && (
-            <p className="font-mono text-[10px] text-muted-foreground mt-3">
-              Updated {generatedDate}
-            </p>
-          )}
-        </div>
-      ) : (
-        <div className="border border-border py-8 px-6 text-center bg-card">
-          <p className="font-mono text-xs text-muted-foreground tracking-wide uppercase">
-            No summary yet &mdash; check back soon.
-          </p>
-        </div>
-      )}
-
-      <div className="mt-4">
-        <Link
-          href="/government"
-          className="inline-block font-mono text-xs font-bold tracking-widest uppercase text-white bg-primary hover:bg-primary/85 px-5 py-2.5 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-        >
-          View All &rarr;
-        </Link>
-      </div>
-    </section>
-  );
-}
-
-function CommunitySectionPreview() {
-  const params = { category: "Community,General,Weather", limit: 1 };
+function StorySectionPreview({
+  label,
+  href,
+  category,
+}: {
+  label: string;
+  href: string;
+  category: string;
+}) {
+  const params = { category, limit: 3 };
   const { data: stories, isLoading } = useGetStories(params, {
     query: { queryKey: getGetStoriesQueryKey(params) },
   });
 
-  const story = stories?.[0];
+  const items = stories?.slice(0, 3) ?? [];
 
   return (
-    <section aria-labelledby="section-community">
-      <SectionHeader>
-        <span id="section-community">Community News</span>
+    <section aria-labelledby={`section-${label.toLowerCase().replace(/\s+/g, "-")}`}>
+      <SectionHeader href={href}>
+        <span id={`section-${label.toLowerCase().replace(/\s+/g, "-")}`}>{label}</span>
       </SectionHeader>
 
       {isLoading ? (
-        <div className="space-y-2">
-          <Skeleton className="h-5 w-3/4" />
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-5/6" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="flex flex-col space-y-3">
+              <Skeleton className="h-[180px] w-full rounded-sm" />
+              <Skeleton className="h-4 w-2/3" />
+              <Skeleton className="h-4 w-1/2" />
+            </div>
+          ))}
         </div>
-      ) : story ? (
-        <StoryCard story={story} index={0} />
+      ) : items.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-max">
+          {items.map((story, i) => (
+            <StoryCard key={story.id} story={story} index={i} />
+          ))}
+        </div>
       ) : (
         <div className="border border-border py-8 px-6 text-center bg-card">
           <p className="font-mono text-xs text-muted-foreground tracking-wide uppercase">
@@ -188,15 +134,6 @@ function CommunitySectionPreview() {
           </p>
         </div>
       )}
-
-      <div className="mt-4">
-        <Link
-          href="/community"
-          className="inline-block font-mono text-xs font-bold tracking-widest uppercase text-white bg-primary hover:bg-primary/85 px-5 py-2.5 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-        >
-          View All &rarr;
-        </Link>
-      </div>
     </section>
   );
 }
@@ -204,15 +141,20 @@ function CommunitySectionPreview() {
 export default function Home() {
   return (
     <div className="w-full">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-12">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-14">
 
-        {/* Local Government digest first, Community News second */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-          <GovSummaryBlock />
-          <CommunitySectionPreview />
-        </div>
+        <StorySectionPreview
+          label="Local Government"
+          href="/government"
+          category="Government,Feature"
+        />
 
-        {/* Weather — below */}
+        <StorySectionPreview
+          label="Community News"
+          href="/community"
+          category="Community,General,Weather"
+        />
+
         <div className="border-t border-border pt-10">
           <SectionHeader>Weather &middot; Port Clinton</SectionHeader>
           <div className="max-w-sm">
