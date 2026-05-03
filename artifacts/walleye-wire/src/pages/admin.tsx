@@ -26,6 +26,7 @@ export default function Admin() {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [manualText, setManualText] = useState("");
   const [manualCategory, setManualCategory] = useState("Community");
+  const [manualSourceUrl, setManualSourceUrl] = useState("");
   const [isRunningAI, setIsRunningAI] = useState(false);
   const [isCheckingGov, setIsCheckingGov] = useState(false);
   const [isLoadingGov, setIsLoadingGov] = useState(false);
@@ -204,9 +205,14 @@ export default function Admin() {
   const onSubmitManualStory = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await adminFetch("/api/stories/submit", "POST", { text: manualText, category: manualCategory });
+      await adminFetch("/api/stories/submit", "POST", {
+        text: manualText,
+        category: manualCategory,
+        ...(manualSourceUrl.trim() && { source_url: manualSourceUrl.trim() }),
+      });
       toast({ title: "Success", description: "Story submitted for processing" });
       setManualText("");
+      setManualSourceUrl("");
     } catch (e) {
       toast({ title: "Error", description: "Failed to submit story", variant: "destructive" });
     }
@@ -464,6 +470,16 @@ export default function Admin() {
                   <option>Feature Story</option>
                   <option>General</option>
                 </select>
+              </div>
+              <div>
+                <label className="font-sans font-bold text-xs tracking-widest uppercase mb-2 block">Source URL <span className="font-normal normal-case tracking-normal text-muted-foreground">(optional)</span></label>
+                <input
+                  type="url"
+                  value={manualSourceUrl}
+                  onChange={(e) => setManualSourceUrl(e.target.value)}
+                  placeholder="https://..."
+                  className="w-full border border-border bg-background p-2 font-mono text-sm rounded-none focus:outline-none focus:ring-1 focus:ring-primary"
+                />
               </div>
               <div>
                 <label className="font-sans font-bold text-xs tracking-widest uppercase mb-2 block">Raw Text / Notes</label>

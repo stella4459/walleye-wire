@@ -79,7 +79,7 @@ router.post("/stories/submit", requireAdmin, async (req, res) => {
       res.status(400).json({ error: "No text provided." });
       return;
     }
-    const { text, category } = parsed.data;
+    const { text, category, source_url } = parsed.data;
 
     const isFeature = category === "Feature Story";
 
@@ -112,6 +112,7 @@ router.post("/stories/submit", requireAdmin, async (req, res) => {
       body: String(s.body || ""),
       story_date: String(s.story_date || ""),
       source_name: String(s.source_name || (isFeature ? "The Walleye Wire" : "Community Submission")),
+      source_url: source_url ?? null,
       is_council: Boolean(s.is_council),
       council_votes: (s.council_votes as Array<{ motion: string; vote: string }>) || [],
       created_at: now,
