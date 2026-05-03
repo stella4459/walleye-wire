@@ -134,6 +134,7 @@ export const GetEventsResponseItem = zod.object({
   description: zod.string().optional(),
   submitted_by: zod.string().optional(),
   source: zod.string().optional(),
+  url: zod.string().optional(),
   approved: zod.boolean().optional(),
   created_at: zod.number().optional(),
 });
@@ -170,6 +171,13 @@ export const AddEventBody = zod.object({
 
 export const AddEventResponse = zod.object({
   id: zod.number(),
+});
+
+/**
+ * @summary Sync Port Clinton events from Shores & Islands calendar (admin)
+ */
+export const SyncShoresIslandsEventsResponse = zod.object({
+  added: zod.number(),
 });
 
 /**

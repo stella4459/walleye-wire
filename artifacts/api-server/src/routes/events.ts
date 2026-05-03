@@ -1,9 +1,10 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { eventsTable } from "@workspace/db";
-import { eq, asc, gte, sql } from "drizzle-orm";
+import { eq, asc, sql } from "drizzle-orm";
 import { SubmitEventBody, AddEventBody } from "@workspace/api-zod";
 import { requireAdmin } from "../middlewares/admin";
+import { fetchPortClintonEvents } from "../lib/calendar";
 
 const router = Router();
 
@@ -96,6 +97,43 @@ router.post("/events/add", requireAdmin, async (req, res) => {
   } catch (e) {
     req.log.error({ err: e }, "Error adding event");
     res.status(500).json({ error: "Failed to add event" });
+  }
+});
+
+router.post("/events/sync-shores-islands", requireAdmin, async (req, res) => {
+  try {
+    const events = await fetchPortClintonEvents();
+
+    await db
+      .delete(eventsTable)
+      .where(sql`${eventsTable.source} = 'Shores & Islands'`);
+
+    if (events.length === 0) {
+      res.json({ added: 0 });
+      return;
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    await db.insert(eventsTable).values(
+      events.map((e) => ({
+        title: e.title,
+        event_date: e.event_date,
+        event_time: "",
+        location: e.location,
+        description: e.description,
+        submitted_by: "",
+        source: "Shores & Islands",
+        url: e.url,
+        approved: true,
+        created_at: now,
+      }))
+    );
+
+    req.log.info({ added: events.length }, "Shores & Islands events synced");
+    res.json({ added: events.length });
+  } catch (e) {
+    req.log.error({ err: e }, "Error syncing Shores & Islands events");
+    res.status(500).json({ error: "Sync failed" });
   }
 });
 

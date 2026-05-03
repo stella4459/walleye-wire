@@ -90,8 +90,19 @@ export default function Calendar() {
                   </span>
                 </div>
                 <div className="flex-grow">
-                  <h3 className="font-headline text-2xl mb-2 text-foreground">{event.title}</h3>
-                  
+                  {event.url ? (
+                    <a
+                      href={event.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-headline text-2xl mb-2 text-foreground hover:text-primary transition-colors block"
+                    >
+                      {event.title}
+                    </a>
+                  ) : (
+                    <h3 className="font-headline text-2xl mb-2 text-foreground">{event.title}</h3>
+                  )}
+
                   <div className="flex flex-wrap gap-4 text-sm font-mono text-muted-foreground mb-4">
                     {event.event_time && (
                       <span className="flex items-center gap-1">
@@ -110,7 +121,13 @@ export default function Calendar() {
                   )}
                   {event.source && (
                     <p className="font-sans text-xs font-bold uppercase tracking-widest text-muted-foreground mt-4">
-                      Source: {event.source}
+                      {event.url ? (
+                        <a href={event.url} target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">
+                          Via {event.source} ↗
+                        </a>
+                      ) : (
+                        <>Source: {event.source}</>
+                      )}
                     </p>
                   )}
                 </div>

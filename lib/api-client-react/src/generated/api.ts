@@ -898,6 +898,87 @@ export const useAddEvent = <
 };
 
 /**
+ * @summary Sync Port Clinton events from Shores & Islands calendar (admin)
+ */
+export const getSyncShoresIslandsEventsUrl = () => {
+  return `/api/events/sync-shores-islands`;
+};
+
+export const syncShoresIslandsEvents = async (
+  options?: RequestInit,
+): Promise<FetchResult> => {
+  return customFetch<FetchResult>(getSyncShoresIslandsEventsUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getSyncShoresIslandsEventsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof syncShoresIslandsEvents>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof syncShoresIslandsEvents>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["syncShoresIslandsEvents"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof syncShoresIslandsEvents>>,
+    void
+  > = () => {
+    return syncShoresIslandsEvents(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SyncShoresIslandsEventsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof syncShoresIslandsEvents>>
+>;
+
+export type SyncShoresIslandsEventsMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Sync Port Clinton events from Shores & Islands calendar (admin)
+ */
+export const useSyncShoresIslandsEvents = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof syncShoresIslandsEvents>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof syncShoresIslandsEvents>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getSyncShoresIslandsEventsMutationOptions(options));
+};
+
+/**
  * @summary Approve a pending event (admin)
  */
 export const getApproveEventUrl = (id: number) => {

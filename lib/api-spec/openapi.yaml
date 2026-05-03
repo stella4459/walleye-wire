@@ -209,6 +209,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/CreateResponse"
 
+  /events/sync-shores-islands:
+    post:
+      operationId: syncShoresIslandsEvents
+      tags: [admin]
+      summary: Sync Port Clinton events from Shores & Islands calendar (admin)
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FetchResult"
+
   /events/approve/{id}:
     post:
       operationId: approveEvent
@@ -383,6 +396,8 @@ components:
         submitted_by:
           type: string
         source:
+          type: string
+        url:
           type: string
         approved:
           type: boolean

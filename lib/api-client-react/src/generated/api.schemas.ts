@@ -64,6 +64,7 @@ export interface Event {
   description?: string;
   submitted_by?: string;
   source?: string;
+  url?: string;
   approved?: boolean;
   created_at?: number;
 }

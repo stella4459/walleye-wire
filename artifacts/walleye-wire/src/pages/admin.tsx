@@ -40,6 +40,7 @@ export default function Admin() {
   const [isLoadingGov, setIsLoadingGov] = useState(false);
   const [isResettingGov, setIsResettingGov] = useState(false);
   const [isRegeneratingSum, setIsRegeneratingSum] = useState(false);
+  const [isSyncingCalendar, setIsSyncingCalendar] = useState(false);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
   const pdfInputRef = useRef<HTMLInputElement>(null);
@@ -150,6 +151,20 @@ export default function Admin() {
       toast({ title: "Error", description: "Failed to run initial load", variant: "destructive" });
     } finally {
       setIsLoadingGov(false);
+    }
+  };
+
+  const onSyncCalendar = async () => {
+    setIsSyncingCalendar(true);
+    try {
+      const result = await adminFetch("/api/events/sync-shores-islands", "POST");
+      const added = result?.added ?? 0;
+      toast({ title: "Calendar Sync Complete", description: `${added} Port Clinton event(s) imported from Shores & Islands.` });
+      queryClient.invalidateQueries({ queryKey: getGetEventsQueryKey() });
+    } catch (e) {
+      toast({ title: "Error", description: "Failed to sync calendar events", variant: "destructive" });
+    } finally {
+      setIsSyncingCalendar(false);
     }
   };
 
@@ -414,6 +429,21 @@ export default function Admin() {
                 <Button onClick={onFetchNews} variant="outline" className="w-full justify-start rounded-none font-mono text-xs uppercase tracking-widest">
                   <RefreshCw size={14} className="mr-2" /> News Only
                 </Button>
+              </div>
+              <div className="pt-2 border-t border-border space-y-2">
+                <p className="font-mono text-[11px] text-muted-foreground leading-relaxed uppercase tracking-widest">Community Calendar</p>
+                <Button
+                  onClick={onSyncCalendar}
+                  disabled={isSyncingCalendar}
+                  variant="outline"
+                  className="w-full justify-start rounded-none font-mono text-xs uppercase tracking-widest"
+                >
+                  <RefreshCw size={14} className={`mr-2 ${isSyncingCalendar ? "animate-spin" : ""}`} />
+                  {isSyncingCalendar ? "Syncing…" : "Sync Shores & Islands Events"}
+                </Button>
+                <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">
+                  Fetches Port Clinton events from the Shores & Islands tourism calendar and imports them. Replaces previously synced entries.
+                </p>
               </div>
               <div className="pt-2 border-t border-border space-y-2">
                 <p className="font-mono text-[11px] text-muted-foreground leading-relaxed uppercase tracking-widest">Government Documents (Google Sheet)</p>

@@ -11,6 +11,7 @@ export const eventsTable = pgTable("events", {
   description: text("description").default(""),
   submitted_by: text("submitted_by").default(""),
   source: text("source").default("Community"),
+  url: text("url").default(""),
   approved: boolean("approved").default(false),
   created_at: integer("created_at").default(0),
 });
