@@ -4,9 +4,9 @@ import { StoryCard } from "@/components/shared/StoryCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 
-type FilterOption = "All" | "Ordinance" | "Resolution" | "Feature Story";
+type FilterOption = "All" | "Ordinance" | "Resolution" | "Netting Recap" | "Feature Story";
 
-const FILTER_OPTIONS: FilterOption[] = ["All", "Ordinance", "Resolution", "Feature Story"];
+const FILTER_OPTIONS: FilterOption[] = ["All", "Ordinance", "Resolution", "Netting Recap", "Feature Story"];
 
 function getQueryParams(filter: FilterOption) {
   if (filter === "Feature Story") {

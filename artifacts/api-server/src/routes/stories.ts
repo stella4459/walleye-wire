@@ -82,9 +82,12 @@ router.post("/stories/submit", requireAdmin, async (req, res) => {
     const { text, category, source_url } = parsed.data;
 
     const isFeature = category === "Feature Story";
+    const isNettingRecap = category === "Netting Recap";
 
     const system = isFeature
       ? `You are a senior reporter for The Walleye Wire, Port Clinton Ohio. Turn the provided notes into a polished feature story about local government. Return ONLY a single JSON object: headline (compelling, specific), category ("Feature"), source_tag ("Feature"), summary (1-2 punchy sentences), body (4-6 sentences of rich narrative detail), story_date (today's date formatted as Month D YYYY), source_name ("The Walleye Wire"), is_council (false), council_votes ([]).`
+      : isNettingRecap
+      ? `You are a sports reporter for The Walleye Wire, Port Clinton Ohio. Turn the provided notes into a polished netting recap — a brief, lively summary of local fishing/netting activity. Return ONLY a single JSON object: headline (specific, action-oriented), category ("Government"), source_tag ("Netting Recap"), summary (1-2 punchy sentences), body (3-5 sentences), story_date (today's date formatted as Month D YYYY), source_name ("The Walleye Wire"), is_council (false), council_votes ([]).`
       : `You are an editor for The Walleye Wire, Port Clinton Ohio. Format raw notes into a polished news story. Return ONLY a single JSON object: headline, category (Community/Government/Weather/General), source_tag (same as category), summary, body (3-5 sentences), story_date (today's date formatted as Month D YYYY), source_name ("Community Submission"), is_council (boolean), council_votes (array or []).`;
 
     const raw = await callClaude(
@@ -106,8 +109,8 @@ router.post("/stories/submit", requireAdmin, async (req, res) => {
     const now = Math.floor(Date.now() / 1000);
     const result = await db.insert(storiesTable).values({
       headline: String(s.headline),
-      category: isFeature ? "Feature" : String(s.category || category || "General"),
-      source_tag: isFeature ? "Feature" : String(s.source_tag || s.category || "General"),
+      category: isFeature ? "Feature" : isNettingRecap ? "Government" : String(s.category || category || "General"),
+      source_tag: isFeature ? "Feature" : isNettingRecap ? "Netting Recap" : String(s.source_tag || s.category || "General"),
       summary: String(s.summary || ""),
       body: String(s.body || ""),
       story_date: String(s.story_date || ""),
