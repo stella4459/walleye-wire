@@ -89,6 +89,58 @@ router.delete("/stories/:id", requireAdmin, async (req, res) => {
 
 router.post("/stories/submit", requireAdmin, async (req, res) => {
   try {
+    // --- Direct publish path (skip Claude entirely) ---
+    if (req.body?.direct_publish === true) {
+      const headline = typeof req.body?.headline === "string" ? req.body.headline.trim() : "";
+      if (!headline) {
+        res.status(400).json({ error: "Headline is required for direct publish." });
+        return;
+      }
+      const bodyHtml = typeof req.body?.body_html === "string" ? req.body.body_html : "";
+      const summary = typeof req.body?.summary === "string" ? req.body.summary.trim() : "";
+      const cat = typeof req.body?.category === "string" ? req.body.category : "Community";
+      const srcUrl = typeof req.body?.source_url === "string" && req.body.source_url.trim() ? req.body.source_url.trim() : null;
+
+      const isFeature = cat === "Feature Story";
+      const isNettingRecap = cat === "Netting Recap";
+      const finalCategory = isFeature ? "Feature" : isNettingRecap ? "Government" : cat;
+      const finalSourceTag = isFeature ? "Feature" : isNettingRecap ? "Netting Recap" : cat;
+
+      const rawDate = typeof req.body?.story_date === "string" ? req.body.story_date : null;
+      const now = Math.floor(Date.now() / 1000);
+      const storyDateFmt = rawDate ? (() => {
+        try {
+          const [y, m, d] = rawDate.split("-").map(Number);
+          return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+        } catch { return null; }
+      })() : null;
+      const createdAt = rawDate ? (() => {
+        try {
+          const [y, m, d] = rawDate.split("-").map(Number);
+          return Math.floor(new Date(y, m - 1, d, 12, 0, 0).getTime() / 1000);
+        } catch { return now; }
+      })() : now;
+
+      const result = await db.insert(storiesTable).values({
+        headline,
+        category: finalCategory,
+        source_tag: finalSourceTag,
+        summary,
+        body: bodyHtml,
+        story_date: storyDateFmt || "",
+        source_name: "The Walleye Wire",
+        source_url: srcUrl,
+        is_council: false,
+        council_votes: [],
+        created_at: createdAt,
+      }).returning({ id: storiesTable.id });
+
+      req.log.info({ id: result[0]?.id, headline }, "[Submit] Direct publish");
+      res.json({ id: result[0]?.id });
+      return;
+    }
+
+    // --- Claude path ---
     const parsed = SubmitStoryBody.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: "No text provided." });

@@ -5,9 +5,9 @@ import { useToast } from "@/hooks/use-toast";
 import { useGetStories, getGetStoriesQueryKey, useGetEvents, getGetEventsQueryKey } from "@workspace/api-client-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Lock, Trash2, CheckCircle, RefreshCw, FileText, Send, Sparkles, Upload } from "lucide-react";
+import { RichTextEditor, type RichTextEditorRef } from "@/components/shared/RichTextEditor";
+import { Lock, Trash2, CheckCircle, RefreshCw, FileText, Send, Sparkles, Upload, Zap } from "lucide-react";
 
 function safeDateFormat(dateStr: string | null | undefined, fmt: string): string {
   if (!dateStr) return "—";
@@ -24,12 +24,17 @@ export default function Admin() {
   const [password, setPassword] = useState("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
-  const [manualText, setManualText] = useState("");
+  const [manualHeadline, setManualHeadline] = useState("");
+  const [manualSummary, setManualSummary] = useState("");
+  const [manualBodyHtml, setManualBodyHtml] = useState("");
   const [manualCategory, setManualCategory] = useState("Community");
   const [manualSourceUrl, setManualSourceUrl] = useState("");
+  const [directPublish, setDirectPublish] = useState(false);
+  const [isSubmittingManual, setIsSubmittingManual] = useState(false);
   const [manualDate, setManualDate] = useState(() => {
     return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
   });
+  const editorRef = useRef<RichTextEditorRef>(null);
   const [isRunningAI, setIsRunningAI] = useState(false);
   const [isCheckingGov, setIsCheckingGov] = useState(false);
   const [isLoadingGov, setIsLoadingGov] = useState(false);
@@ -205,21 +210,54 @@ export default function Admin() {
     }
   };
 
+  const resetManualForm = () => {
+    setManualHeadline("");
+    setManualSummary("");
+    setManualBodyHtml("");
+    setManualSourceUrl("");
+    setManualDate(new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }));
+    editorRef.current?.reset();
+  };
+
   const onSubmitManualStory = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (directPublish && !manualHeadline.trim()) {
+      toast({ title: "Headline required", description: "Enter a headline to publish directly.", variant: "destructive" });
+      return;
+    }
+    setIsSubmittingManual(true);
     try {
-      await adminFetch("/api/stories/submit", "POST", {
-        text: manualText,
-        category: manualCategory,
-        ...(manualSourceUrl.trim() && { source_url: manualSourceUrl.trim() }),
-        ...(manualDate && { story_date: manualDate }),
-      });
-      toast({ title: "Success", description: "Story submitted for processing" });
-      setManualText("");
-      setManualSourceUrl("");
-      setManualDate(new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }));
-    } catch (e) {
+      if (directPublish) {
+        await adminFetch("/api/stories/submit", "POST", {
+          text: "",
+          category: manualCategory,
+          direct_publish: true,
+          headline: manualHeadline.trim(),
+          summary: manualSummary.trim(),
+          body_html: manualBodyHtml,
+          ...(manualSourceUrl.trim() && { source_url: manualSourceUrl.trim() }),
+          ...(manualDate && { story_date: manualDate }),
+        });
+        toast({ title: "Published!", description: "Article published directly without AI." });
+      } else {
+        const plainText = manualBodyHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        const fullText = manualHeadline.trim()
+          ? `${manualHeadline.trim()}\n\n${plainText}`
+          : plainText;
+        await adminFetch("/api/stories/submit", "POST", {
+          text: fullText,
+          category: manualCategory,
+          ...(manualSourceUrl.trim() && { source_url: manualSourceUrl.trim() }),
+          ...(manualDate && { story_date: manualDate }),
+        });
+        toast({ title: "Submitted", description: "Story sent to AI for processing." });
+      }
+      resetManualForm();
+      queryClient.invalidateQueries({ queryKey: getGetStoriesQueryKey() });
+    } catch {
       toast({ title: "Error", description: "Failed to submit story", variant: "destructive" });
+    } finally {
+      setIsSubmittingManual(false);
     }
   };
 
@@ -461,53 +499,122 @@ export default function Admin() {
           </section>
 
           <section className="bg-card border border-border p-6">
-            <h2 className="font-headline text-2xl mb-4 border-b border-border pb-2 uppercase">Manual Entry</h2>
+            <h2 className="font-headline text-2xl mb-1 uppercase">Manual Entry</h2>
+            <p className="font-mono text-xs text-muted-foreground mb-4 border-b border-border pb-4">
+              Write or paste your article. Send to AI to generate a polished story, or publish directly as written.
+            </p>
             <form onSubmit={onSubmitManualStory} className="space-y-4">
-              <div>
-                <label className="font-sans font-bold text-xs tracking-widest uppercase mb-2 block">Category</label>
-                <select 
-                  value={manualCategory} 
-                  onChange={(e) => setManualCategory(e.target.value)}
-                  className="w-full border border-border bg-background p-2 font-mono text-sm rounded-none focus:outline-none focus:ring-1 focus:ring-primary"
-                >
-                  <option>Community</option>
-                  <option>Government</option>
-                  <option>Netting Recap</option>
-                  <option>Feature Story</option>
-                  <option>General</option>
-                </select>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="font-sans font-bold text-xs tracking-widest uppercase mb-2 block">Category</label>
+                  <select
+                    value={manualCategory}
+                    onChange={(e) => setManualCategory(e.target.value)}
+                    className="w-full border border-border bg-background p-2 font-mono text-sm rounded-none focus:outline-none focus:ring-1 focus:ring-primary"
+                  >
+                    <option>Community</option>
+                    <option>Government</option>
+                    <option>Netting Recap</option>
+                    <option>Feature Story</option>
+                    <option>General</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-sans font-bold text-xs tracking-widest uppercase mb-2 block">Story Date</label>
+                  <input
+                    type="date"
+                    value={manualDate}
+                    onChange={(e) => setManualDate(e.target.value)}
+                    className="w-full border border-border bg-background p-2 font-mono text-sm rounded-none focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
               </div>
+
               <div>
-                <label className="font-sans font-bold text-xs tracking-widest uppercase mb-2 block">Story Date</label>
+                <label className="font-sans font-bold text-xs tracking-widest uppercase mb-2 block">
+                  Headline
+                  {!directPublish && <span className="font-normal normal-case tracking-normal text-muted-foreground ml-2">(AI generates if left blank)</span>}
+                  {directPublish && <span className="text-destructive ml-1">*</span>}
+                </label>
                 <input
-                  type="date"
-                  value={manualDate}
-                  onChange={(e) => setManualDate(e.target.value)}
+                  type="text"
+                  value={manualHeadline}
+                  onChange={(e) => setManualHeadline(e.target.value)}
+                  placeholder="Enter headline…"
+                  required={directPublish}
                   className="w-full border border-border bg-background p-2 font-mono text-sm rounded-none focus:outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>
+
+              {directPublish && (
+                <div>
+                  <label className="font-sans font-bold text-xs tracking-widest uppercase mb-2 block">
+                    Summary <span className="font-normal normal-case tracking-normal text-muted-foreground">(optional — 1–2 sentence teaser)</span>
+                  </label>
+                  <textarea
+                    value={manualSummary}
+                    onChange={(e) => setManualSummary(e.target.value)}
+                    placeholder="Short summary shown on the story card…"
+                    rows={2}
+                    className="w-full border border-border bg-background p-2 font-mono text-sm rounded-none focus:outline-none focus:ring-1 focus:ring-primary resize-y"
+                  />
+                </div>
+              )}
+
               <div>
-                <label className="font-sans font-bold text-xs tracking-widest uppercase mb-2 block">Source URL <span className="font-normal normal-case tracking-normal text-muted-foreground">(optional)</span></label>
+                <label className="font-sans font-bold text-xs tracking-widest uppercase mb-2 block">
+                  {directPublish ? "Article Body" : "Notes / Raw Text"}
+                </label>
+                <RichTextEditor
+                  ref={editorRef}
+                  onChange={setManualBodyHtml}
+                  placeholder={directPublish ? "Write your article here…" : "Paste raw notes for AI to format into a story…"}
+                  minHeight="220px"
+                />
+              </div>
+
+              <div>
+                <label className="font-sans font-bold text-xs tracking-widest uppercase mb-2 block">
+                  Source URL <span className="font-normal normal-case tracking-normal text-muted-foreground">(optional)</span>
+                </label>
                 <input
                   type="url"
                   value={manualSourceUrl}
                   onChange={(e) => setManualSourceUrl(e.target.value)}
-                  placeholder="https://..."
+                  placeholder="https://…"
                   className="w-full border border-border bg-background p-2 font-mono text-sm rounded-none focus:outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>
-              <div>
-                <label className="font-sans font-bold text-xs tracking-widest uppercase mb-2 block">Raw Text / Notes</label>
-                <Textarea 
-                  value={manualText}
-                  onChange={(e) => setManualText(e.target.value)}
-                  placeholder="Paste raw text here for AI to format into a story..."
-                  className="min-h-[200px] rounded-none font-mono text-sm"
-                  required
+
+              <label className="flex items-start gap-3 cursor-pointer p-3 border border-border bg-background hover:bg-accent/30 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={directPublish}
+                  onChange={(e) => setDirectPublish(e.target.checked)}
+                  className="mt-0.5 accent-primary w-4 h-4 flex-shrink-0"
                 />
-              </div>
-              <Button type="submit" className="w-full rounded-none font-bold tracking-widest uppercase">
-                <Send size={16} className="mr-2" /> Process Story
+                <span>
+                  <span className="font-sans font-bold text-sm tracking-wide flex items-center gap-2">
+                    <Zap size={14} className="text-amber-600" /> Publish directly without AI
+                  </span>
+                  <span className="font-mono text-xs text-muted-foreground block mt-0.5">
+                    Skips Claude — your text is published exactly as written. Headline is required.
+                  </span>
+                </span>
+              </label>
+
+              <Button
+                type="submit"
+                disabled={isSubmittingManual}
+                className="w-full rounded-none font-bold tracking-widest uppercase"
+              >
+                {isSubmittingManual ? (
+                  <><Sparkles size={16} className="mr-2 animate-spin" /> {directPublish ? "Publishing…" : "Processing…"}</>
+                ) : directPublish ? (
+                  <><Zap size={16} className="mr-2" /> Publish Directly</>
+                ) : (
+                  <><Send size={16} className="mr-2" /> Send to AI</>
+                )}
               </Button>
             </form>
           </section>

@@ -160,11 +160,18 @@ export function StoryCard({ story, index = 0 }: StoryCardProps) {
               )}
               
               {story.body && (
-                <div className="prose prose-sm md:prose-base prose-p:font-serif prose-headings:font-headline max-w-none text-foreground prose-a:text-primary">
-                  {story.body.split('\n\n').map((paragraph: string, i: number) => (
-                    <p key={i} className="leading-relaxed mb-4">{paragraph}</p>
-                  ))}
-                </div>
+                story.body.trim().startsWith("<") ? (
+                  <div
+                    className="prose prose-sm md:prose-base prose-p:font-serif prose-headings:font-headline max-w-none text-foreground prose-a:text-primary"
+                    dangerouslySetInnerHTML={{ __html: story.body }}
+                  />
+                ) : (
+                  <div className="prose prose-sm md:prose-base prose-p:font-serif prose-headings:font-headline max-w-none text-foreground prose-a:text-primary">
+                    {story.body.split('\n\n').map((paragraph: string, i: number) => (
+                      <p key={i} className="leading-relaxed mb-4">{paragraph}</p>
+                    ))}
+                  </div>
+                )
               )}
             </div>
           </motion.div>

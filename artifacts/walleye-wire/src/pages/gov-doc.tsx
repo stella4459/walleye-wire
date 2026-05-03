@@ -164,11 +164,18 @@ export default function GovDoc() {
         )}
 
         {story.body && (
-          <div className="prose prose-base prose-p:font-serif prose-headings:font-headline max-w-none text-foreground mb-10">
-            {story.body.split("\n\n").map((paragraph: string, i: number) => (
-              <p key={i} className="leading-relaxed mb-5 font-serif text-base">{paragraph}</p>
-            ))}
-          </div>
+          story.body.trim().startsWith("<") ? (
+            <div
+              className="prose prose-base prose-p:font-serif prose-headings:font-headline max-w-none text-foreground mb-10"
+              dangerouslySetInnerHTML={{ __html: story.body }}
+            />
+          ) : (
+            <div className="prose prose-base prose-p:font-serif prose-headings:font-headline max-w-none text-foreground mb-10">
+              {story.body.split("\n\n").map((paragraph: string, i: number) => (
+                <p key={i} className="leading-relaxed mb-5 font-serif text-base">{paragraph}</p>
+              ))}
+            </div>
+          )
         )}
 
         <div className="border-t-2 border-foreground pt-8">
