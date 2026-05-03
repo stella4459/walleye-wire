@@ -165,13 +165,20 @@ Each story object must have:
       return 0;
     }
 
-    // Map stories back to real URLs using article_index
+    // Map stories back to real URLs and pubDates using article_index
+    const now = Math.floor(Date.now() / 1000);
     const valid = stories
       .map((s) => {
         const idx = Number(s.article_index);
         const source = batchItems[idx - 1]; // 1-based index
         if (!source) return null;
-        return { ...s, source_url: source.link };
+        // Use the article's own pubDate for created_at so sort order matches visible dates
+        let createdAt = now;
+        try {
+          const parsed = new Date(source.pubDate);
+          if (!isNaN(parsed.getTime())) createdAt = Math.floor(parsed.getTime() / 1000);
+        } catch {}
+        return { ...s, source_url: source.link, _created_at: createdAt };
       })
       .filter(Boolean) as Array<Record<string, unknown>>;
 
@@ -180,7 +187,6 @@ Each story object must have:
       return 0;
     }
 
-    const now = Math.floor(Date.now() / 1000);
     await db.insert(storiesTable).values(
       valid.map((s) => ({
         headline: String(s.headline || ""),
@@ -193,7 +199,7 @@ Each story object must have:
         source_url: String(s.source_url || ""),
         is_council: false,
         council_votes: [],
-        created_at: now,
+        created_at: Number(s._created_at ?? now),
       }))
     );
 
