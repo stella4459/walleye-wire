@@ -3,6 +3,7 @@ builder = "nixpacks"
 buildCommand = "pnpm install --frozen-lockfile && pnpm --filter @workspace/walleye-wire run build && pnpm --filter @workspace/api-server run build"
 
 [build.env]
+NODE_VERSION = "20"
 NODE_ENV = "production"
 BASE_PATH = "/"
 PORT = "3000"
