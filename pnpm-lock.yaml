@@ -3,6 +3,11 @@ lockfileVersion: '9.0'
 settings:
   autoInstallPeers: false
   excludeLinksFromLockfile: false
+  onlyBuiltDependencies:
+    - '@swc/core'
+    - esbuild
+    - msw
+    - unrs-resolver
 
 catalogs:
   default:
@@ -66,6 +71,9 @@ catalogs:
     vite:
       specifier: ^7.3.2
       version: 7.3.2
+    wouter:
+      specifier: ^3.3.5
+      version: 3.9.0
     zod:
       specifier: ^3.25.76
       version: 3.25.76
